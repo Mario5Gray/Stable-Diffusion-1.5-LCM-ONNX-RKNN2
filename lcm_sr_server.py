@@ -58,6 +58,8 @@ from PIL import Image
 from rknnlite.api import RKNNLite
 from rknnlcm import RKNN2Model, RKNN2LatentConsistencyPipeline
 
+# lcm_sr_server.py (add near imports)
+from compat_endpoints import CompatEndpoints
 
 # -----------------------------
 # Request schema (HTTP)
@@ -709,6 +711,64 @@ async def superres_v1(
 ):
     return await superres(file=file, magnitude=magnitude, out_format=out_format, quality=quality)
 
+def _run_generate_from_dict(gen_req: dict):
+    """
+    Shared internal runner used by external compat endpoints.
+    Returns: (bytes, seed_used, meta_headers)
+    """
+    # Build internal request
+    req = GenerateRequest(**gen_req)
+
+    service: PipelineService = app.state.service
+
+    # ---- base SD generation ----
+    fut = service.submit(req, timeout_s=0.25)
+    png_bytes, seed = fut.result(timeout=REQUEST_TIMEOUT)
+
+    # ---- optional SR postprocess ----
+    did_superres = False
+    out_bytes = png_bytes
+
+    meta_headers = {
+        "X-Seed": str(seed),
+        "X-SuperRes": "0",
+    }
+
+    if req.superres:
+        sr = getattr(app.state, "sr_service", None)
+        if sr is None:
+            # For compat callers, raise a normal exception (will become 500)
+            raise RuntimeError("Super-resolution requested but SR service is disabled")
+
+        sr_mag = int(req.superres_magnitude or 2)
+
+        sr_fut = sr.submit(
+            image_bytes=png_bytes,
+            out_format=req.superres_format,
+            quality=req.superres_quality,
+            magnitude=sr_mag,
+            timeout_s=0.25,
+        )
+        out_bytes = sr_fut.result(timeout=SR_REQUEST_TIMEOUT)
+
+        did_superres = True
+        meta_headers.update(
+            {
+                "X-SuperRes": "1",
+                "X-SR-Passes": str(sr_mag),
+                "X-SR-Model": os.path.basename(SR_MODEL_PATH),
+                "X-SR-Scale-Per-Pass": (
+                    str(SR_OUTPUT_SIZE // SR_INPUT_SIZE)
+                    if SR_OUTPUT_SIZE % SR_INPUT_SIZE == 0
+                    else str(SR_OUTPUT_SIZE / SR_INPUT_SIZE)
+                ),
+                "X-SR-Format": req.superres_format,
+            }
+        )
+
+    return out_bytes, seed, meta_headers
+
+CompatEndpoints(app=app, run_generate=_run_generate_from_dict).mount()
 
 # UI static mount (serves Vite dist)
 app.mount(
