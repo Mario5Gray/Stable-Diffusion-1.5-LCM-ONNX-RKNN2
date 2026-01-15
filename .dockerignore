@@ -1,0 +1,17 @@
+.git
+.git/*
+model
+model/*
+__pycache__
+**/__pycache__
+
+.aider*
+
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+venv
+dist
+build
