@@ -42,6 +42,11 @@ export default function App() {
     startDreaming,
     stopDreaming,
     guideDream,
+    saveDreamAndContinue,
+    dreamMessageId,
+    dreamHistoryPrev,
+    dreamHistoryNext,
+    dreamHistoryLive,
     dreamTemperature,
     setDreamTemperature,
     dreamInterval,
@@ -248,6 +253,11 @@ export default function App() {
             }}
             inflightCount={inflightCount}
             isDreaming={isDreaming}
+            dreamMessageId={dreamMessageId}
+            onDreamSave={saveDreamAndContinue}
+            onDreamHistoryPrev={dreamHistoryPrev}
+            onDreamHistoryNext={dreamHistoryNext}
+            onDreamHistoryLive={dreamHistoryLive}
             srLevel={params.effective.superresLevel}
             onCopyPrompt={onCopyPrompt}
             copied={copied}

@@ -839,7 +839,7 @@ def storage_put(key: str, payload: str = Body(..., embed=True)):
 
 @app.get("/storage/{key}")
 def storage_get(key: str):
-    if not STORAGE_ENABLE_HTTP:
+    if not os.environ.get("STORAGE_ENABLE_HTTP", 1):
         raise HTTPException(404, detail="storage http disabled")
 
     st = getattr(app.state, "storage", None)

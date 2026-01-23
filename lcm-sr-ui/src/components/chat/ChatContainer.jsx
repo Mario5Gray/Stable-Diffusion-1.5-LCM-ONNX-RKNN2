@@ -21,6 +21,11 @@ export function ChatContainer({
   composer,
   inflightCount,
   isDreaming,
+  dreamMessageId,
+  onDreamSave,
+  onDreamHistoryPrev,
+  onDreamHistoryNext,
+  onDreamHistoryLive,
   srLevel,
   onCopyPrompt,
   copied,
@@ -55,6 +60,12 @@ export function ChatContainer({
                       ? () => onCancelRequest(msg.id)
                       : null
                   }
+                  isDreamMessage={isDreaming && msg.id === dreamMessageId}
+                  hasDreamHistory={msg.imageHistory?.length > 1}
+                  onDreamSave={onDreamSave}
+                  onDreamHistoryPrev={() => onDreamHistoryPrev?.(msg)}
+                  onDreamHistoryNext={() => onDreamHistoryNext?.(msg)}
+                  onDreamHistoryLive={() => onDreamHistoryLive?.(msg)}
                 />
               </div>
             ))}

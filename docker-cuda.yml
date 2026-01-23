@@ -13,7 +13,8 @@ services:
     ports:
       - "4200:4200"
     volumes:
-      - /home/hdd/workspace/ComfyUI/models/checkpoints:/models:rw,Z
+      - /home/hdd/workspace/ComfyUI/models:/models:rw,Z
+      - ${FS_HOST_PATH:-./store}:/storage:rw,Z
     env_file:
       - env.docker  # Load all
       - env.cuda

@@ -13,9 +13,8 @@ if [[ "$(uname -m)" == "x86_64" ]]; then
 else 
   export EXTRA_ARGS='---env-file env.lcm --name rknn-lcm-sd-ui darkbit1001/rknn-lcm-sd-ui:latest'
 fi
-
-
-
+echo $MODEL_ROOT
+echo $CUDA_CKPT_PATH
 set -x
 docker run --rm -it \
   --gpus all \
@@ -24,5 +23,6 @@ docker run --rm -it \
   --privileged \
   -e CUDA_CKPT_PATH=${CUDA_CKPT_PATH} \
   $@ \
+  -v ./store:/app/store:rw,Z \
   -v "${MODEL_ROOT}:/models:ro,Z" ${EXTRA_ARGS} bash  
 set +x

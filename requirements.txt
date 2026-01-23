@@ -1,6 +1,6 @@
 # base deps
 protobuf>=4.21.6,<=4.25.4
-
+accelerate
 # utils
 psutil>=5.9.0
 ruamel.yaml>=0.17.21

@@ -1,7 +1,7 @@
 // src/components/chat/MessageBubble.jsx
 
 import React from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, ChevronLeft, ChevronRight, Radio } from 'lucide-react';
 import { MESSAGE_ROLES, MESSAGE_KINDS } from '../../utils/constants';
 
 /**
@@ -85,8 +85,25 @@ function ImagePlaceholder({ size, onCancel }) {
  * @param {boolean} props.isSelected - Whether this message is selected
  * @param {function} props.onSelect - Selection callback
  * @param {function} [props.onCancel] - Cancel callback for pending messages
+ * @param {boolean} [props.isDreamMessage] - Whether this is the active dream message
+ * @param {boolean} [props.hasDreamHistory] - Whether this message has browsable history
+ * @param {function} [props.onDreamSave] - Callback to save dream and continue (double-click)
+ * @param {function} [props.onDreamHistoryPrev] - Go to previous in history
+ * @param {function} [props.onDreamHistoryNext] - Go to next in history
+ * @param {function} [props.onDreamHistoryLive] - Go to latest (live)
  */
-export function MessageBubble({ msg, isSelected, onSelect, onCancel }) {
+export function MessageBubble({
+  msg,
+  isSelected,
+  onSelect,
+  onCancel,
+  isDreamMessage,
+  hasDreamHistory,
+  onDreamSave,
+  onDreamHistoryPrev,
+  onDreamHistoryNext,
+  onDreamHistoryLive,
+}) {
   const isUser = msg.role === MESSAGE_ROLES.USER;
 
   // First-time pending generation (no image yet) - show placeholder instead of bubble
@@ -167,12 +184,19 @@ export function MessageBubble({ msg, isSelected, onSelect, onCancel }) {
                   alt="generation"
                   className={
                     'max-h-[520px] w-auto rounded-xl bg-background' +
-                    (msg.isRegenerating ? ' opacity-60' : '')
+                    (msg.isRegenerating ? ' opacity-60' : '') +
+                    (isDreamMessage ? ' cursor-pointer' : '')
                   }
                   loading="lazy"
                   onClick={(e) => {
                     e.stopPropagation();
                     onSelect?.();
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    if (isDreamMessage && onDreamSave) {
+                      onDreamSave(msg);
+                    }
                   }}
                 />
                 {/* Regenerating overlay - floats above image, no layout shift */}
@@ -193,9 +217,48 @@ export function MessageBubble({ msg, isSelected, onSelect, onCancel }) {
                     {msg.errorText}
                   </div>
                 )}
+                {/* Dream mode indicator */}
+                {isDreamMessage && !msg.isRegenerating && (
+                  <div className="absolute top-2 right-2 bg-purple-600/80 text-white text-xs px-2 py-1 rounded backdrop-blur-sm">
+                    dreaming
+                  </div>
+                )}
               </div>
             </div>
-          
+
+            {/* Dream history navigation */}
+            {hasDreamHistory && (
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDreamHistoryPrev?.(); }}
+                  disabled={msg.historyIndex === 0}
+                  className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Previous"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-xs text-muted-foreground min-w-[60px] text-center">
+                  {(msg.historyIndex ?? 0) + 1} / {msg.imageHistory?.length ?? 0}
+                </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDreamHistoryNext?.(); }}
+                  disabled={msg.historyIndex === (msg.imageHistory?.length ?? 1) - 1}
+                  className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Next"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+                {!isDreamMessage && msg.historyIndex !== (msg.imageHistory?.length ?? 1) - 1 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDreamHistoryLive?.(); }}
+                    className="p-1 rounded hover:bg-muted text-purple-500"
+                    title="Go to latest"
+                  >
+                    <Radio className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Metadata pills + download */}
             <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">

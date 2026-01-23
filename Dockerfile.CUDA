@@ -57,6 +57,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY *.py /app
 COPY start.sh /app
 COPY backends/ /app/backends/
+COPY yume/ /app/yume/
 RUN chmod +x /app/start.sh
 
 # Copy built UI into where FastAPI will serve it

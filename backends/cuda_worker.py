@@ -17,10 +17,14 @@ def _bool_env(name: str, default: str = "0") -> bool:
 
 class DiffusersCudaWorker(PipelineWorker):
     """
-    CUDA Diffusers worker for SD1.5 LCM checkpoints (.safetensors).
+    CUDA Diffusers worker for SD1.5 LCM models.
+
+    Supports two formats:
+      - Single file: .safetensors or .ckpt checkpoint
+      - Diffusers layout: directory with model_index.json
 
     Env:
-      CUDA_CKPT_PATH=/path/to/DreamShaper-V88-LCM.safetensors
+      CUDA_CKPT_PATH=/path/to/model.safetensors  (or /path/to/model_dir/)
       CUDA_DTYPE=fp16|bf16|fp32   (default fp16)
       CUDA_DEVICE=cuda:0         (default cuda:0)
       CUDA_ENABLE_XFORMERS=1     (default 0)
@@ -50,14 +54,31 @@ class DiffusersCudaWorker(PipelineWorker):
 
         enable_xformers = _bool_env("CUDA_ENABLE_XFORMERS", "0")
         attention_slicing = _bool_env("CUDA_ATTENTION_SLICING", "0")
-
-        pipe = StableDiffusionPipeline.from_single_file(
-            ckpt_path,
-            torch_dtype=dtype,
-            safety_checker=None,
-            requires_safety_checker=False,
+      
+        is_diffusers_dir = os.path.isdir(ckpt_path) and os.path.exists(
+            os.path.join(ckpt_path, "model_index.json")
         )
 
+        if is_diffusers_dir:
+            # Diffusers standard layout (directory with model_index.json)
+            pipe = StableDiffusionPipeline.from_pretrained(
+                ckpt_path,
+                torch_dtype=dtype,
+                safety_checker=None,
+                requires_safety_checker=False,
+            )
+            format_name = "diffusers"
+        else:
+            # Single file (.safetensors or .ckpt)
+            pipe = StableDiffusionPipeline.from_single_file(
+                ckpt_path,
+                torch_dtype=dtype,
+                safety_checker=None,
+                requires_safety_checker=False,
+            )
+            format_name = "safetensors"
+
+        # LCM scheduler (applies to both formats)
         pipe.scheduler = LCMScheduler.from_config(pipe.scheduler.config)
         pipe = pipe.to(device)
 
@@ -76,7 +97,7 @@ class DiffusersCudaWorker(PipelineWorker):
         self.device = device
         self.dtype = dtype
 
-        print(f"[cuda] worker {worker_id} loaded: {os.path.basename(ckpt_path)} on {device} dtype={dtype_str}")
+        print(f"[cuda] worker {worker_id} loaded: {os.path.basename(ckpt_path)} ({format_name}) on {device} dtype={dtype_str}")
 
     def run_job(self, job) -> tuple[bytes, int]:
         """
