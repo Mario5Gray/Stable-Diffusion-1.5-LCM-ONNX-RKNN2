@@ -53,6 +53,7 @@ export function OptionsPanel({
   selectedMsgId,
   onClearSelection,
   onApplyPromptDelta,
+  onApplySeedDelta,
   onRerunSelected,
   dreamState,
   onSuperResUpload,
@@ -68,6 +69,8 @@ export function OptionsPanel({
 
   // Track selected image ID to sync only on selection change
   const prevSelectedId = useRef(null);
+  // Flag to skip prompt push during selection sync
+  const isSyncingSelection = useRef(false);
 
   // Local state for prompt
   const [localPrompt, setLocalPrompt] = useState(params.draft.prompt);
@@ -75,33 +78,52 @@ export function OptionsPanel({
 
   // Local state for controls (no debounce - immediate feedback, push on change)
   const [localSteps, setLocalSteps] = useState(params.effective.steps);
-  const [localCfg, setLocalCfg] = useState(params.effective.cfg);
+  // Split CFG into base (whole number) and fine (decimal 0-9 representing 0.0-0.9)
+  const [localCfgBase, setLocalCfgBase] = useState(Math.floor(params.effective.cfg));
+  const [localCfgFine, setLocalCfgFine] = useState(Math.round((params.effective.cfg % 1) * 10));
   const [localSrLevel, setLocalSrLevel] = useState(params.effective.superresLevel);
+  // Seed modifier sign: 1 for positive, -1 for negative
+  const [seedSign, setSeedSign] = useState(1);
+
+  // Combined CFG value for display
+  const localCfg = localCfgBase + localCfgFine / 10;
 
   // Sync local state when selection changes (including select/deselect)
   useEffect(() => {
     const currentId = selectedMsgId ?? null;
     if (currentId !== prevSelectedId.current) {
       prevSelectedId.current = currentId;
+      // Mark that we're syncing to prevent prompt push from triggering regen
+      isSyncingSelection.current = true;
 
       if (selectedParams) {
         // Selected an image - sync from its params
+        const cfg = selectedParams.cfg ?? params.effective.cfg;
         setLocalPrompt(selectedParams.prompt ?? params.draft.prompt);
         setLocalSteps(selectedParams.steps ?? params.effective.steps);
-        setLocalCfg(selectedParams.cfg ?? params.effective.cfg);
+        setLocalCfgBase(Math.floor(cfg));
+        setLocalCfgFine(Math.round((cfg % 1) * 10));
         setLocalSrLevel(selectedParams.superresLevel ?? params.effective.superresLevel);
       } else {
         // Deselected - sync from draft params
+        const cfg = params.effective.cfg;
         setLocalPrompt(params.draft.prompt);
         setLocalSteps(params.effective.steps);
-        setLocalCfg(params.effective.cfg);
+        setLocalCfgBase(Math.floor(cfg));
+        setLocalCfgFine(Math.round((cfg % 1) * 10));
         setLocalSrLevel(params.effective.superresLevel);
       }
+
+      // Clear sync flag after debounce settles (must exceed useDebounceValue delay)
+      setTimeout(() => {
+        isSyncingSelection.current = false;
+      }, 600);
     }
   }, [selectedMsgId, selectedParams, params.draft.prompt, params.effective.steps, params.effective.cfg, params.effective.superresLevel]);
 
-  // Push debounced prompt to parent
+  // Push debounced prompt to parent (skip during selection sync to avoid regen)
   useEffect(() => {
+    if (isSyncingSelection.current) return;
     if (debouncedPrompt !== params.draft.prompt) {
       params.setPrompt(debouncedPrompt);
     }
@@ -113,9 +135,14 @@ export function OptionsPanel({
     params.setSteps(v);
   };
 
-  const handleCfgChange = (v) => {
-    setLocalCfg(v);
-    params.setCfg(v);
+  const handleCfgBaseChange = (v) => {
+    setLocalCfgBase(v);
+    params.setCfg(v + localCfgFine / 10);
+  };
+
+  const handleCfgFineChange = (v) => {
+    setLocalCfgFine(v);
+    params.setCfg(localCfgBase + v / 10);
   };
 
   const handleSrLevelChange = (v) => {
@@ -196,24 +223,27 @@ export function OptionsPanel({
 
           {/* Steps - Segmented Control */}
           <div className="space-y-2">
-            <Label>Steps</Label>
+            <div className="flex items-center justify-between">
+              <Label>Steps</Label>
+              <span className="text-sm text-muted-foreground tabular-nums">{localSteps}</span>
+            </div>
             <div
               className="relative flex rounded-xl p-0.5 overflow-hidden"
               style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%)' }}
             >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((v) => (
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((v) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => handleStepsChange(v)}
                   className={
-                    'flex-1 py-1.5 text-xs font-medium rounded-lg transition-all ' +
+                    'flex-1 py-1 text-[10px] font-medium rounded-lg transition-all ' +
                     (localSteps === v
                       ? 'bg-white text-purple-700 shadow-sm'
                       : 'text-white/90 hover:bg-white/20')
                   }
                 >
-                  {v}
+                  {v % 2 === 0 ? v : '|'}
                 </button>
               ))}
             </div>
@@ -224,30 +254,100 @@ export function OptionsPanel({
 
           {/* CFG - Segmented Control */}
           <div className="space-y-2">
-            <Label>CFG (Guidance)</Label>
+            <div className="flex items-center justify-between">
+              <Label>CFG (Guidance)</Label>
+              <span className="text-sm text-muted-foreground tabular-nums">{localCfg.toFixed(1)}</span>
+            </div>
             <div
               className="relative flex rounded-xl p-0.5 overflow-hidden"
               style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%)' }}
             >
-              {[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0].map((v) => (
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((v) => (
                 <button
                   key={v}
                   type="button"
-                  onClick={() => handleCfgChange(v)}
+                  onClick={() => handleCfgBaseChange(v)}
                   className={
                     'flex-1 py-1.5 text-xs font-medium rounded-lg transition-all ' +
-                    (localCfg === v
+                    (localCfgBase === v
                       ? 'bg-white text-purple-700 shadow-sm'
                       : 'text-white/90 hover:bg-white/20')
                   }
                 >
-                  {v.toFixed(1)}
+                  {v}
+                </button>
+              ))}
+            </div>
+
+            {/* CFG Fine-tune (0.0 - 0.9) */}
+            <div
+              className="relative flex rounded-xl p-0.5 overflow-hidden"
+              style={{ background: 'linear-gradient(135deg, #6d28d9 0%, #7c3aed 50%, #8b5cf6 100%)' }}
+            >
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => handleCfgFineChange(v)}
+                  className={
+                    'flex-1 py-1 text-[10px] font-medium rounded-lg transition-all ' +
+                    (localCfgFine === v
+                      ? 'bg-white text-purple-700 shadow-sm'
+                      : 'text-white/80 hover:bg-white/20')
+                  }
+                >
+                  {v % 2 === 0 ? `.${v}` : '|'}
                 </button>
               ))}
             </div>
             <div className="text-xs text-muted-foreground">
-              LCM typical: ~{CFG_CONFIG.LCM_TYPICAL}. Higher = stronger prompt adherence.
+              Top: whole number. Bottom: fine-tune (+0.0 to +0.9).
             </div>
+            {selectedParams && (
+              <div className="space-y-2 mt-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Seed Modifier</Label>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    current: {selectedParams.seed}
+                  </span>
+                </div>
+                <div
+                  className="relative flex rounded-xl p-0.5 overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%)' }}
+                >
+                  {/* Sign toggle button */}
+                  <button
+                    type="button"
+                    onClick={() => setSeedSign(s => s * -1)}
+                    className={
+                      'flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ' +
+                      'bg-white/20 text-white hover:bg-white/30'
+                    }
+                  >
+                    {seedSign > 0 ? '+/−' : '−/+'}
+                  </button>
+                  {[
+                    { delta: 1, label: '1' },
+                    { delta: 10, label: '10' },
+                    { delta: 100, label: '100' },
+                    { delta: 1000, label: '1k' },
+                    { delta: 10000, label: '10k' },
+                  ].map(({ delta, label }) => (
+                    <button
+                      key={delta}
+                      type="button"
+                      onClick={() => onApplySeedDelta?.(delta * seedSign)}
+                      className="flex-1 py-1.5 text-xs font-medium rounded-lg transition-all text-white/90 hover:bg-white/20 active:bg-white active:text-purple-700"
+                    >
+                      {seedSign > 0 ? '+' : '−'}{label}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {seedSign > 0 ? 'Add to' : 'Subtract from'} current seed and regenerate.
+                </div>
+              </div>
+            )}            
           </div>
 
           <Separator />
@@ -306,6 +406,8 @@ export function OptionsPanel({
               When Random: a new seed is chosen per request. When Fixed: the seed
               field is used.
             </div>
+
+            {/* Seed Modifier - only when image is selected */}
           </div>
           {/* Size */}
           <div className="space-y-1">

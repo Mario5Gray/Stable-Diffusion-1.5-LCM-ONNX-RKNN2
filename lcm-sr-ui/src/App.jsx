@@ -1,6 +1,6 @@
 // src/App.jsx
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useChatMessages } from './hooks/useChatMessages';
 import { useGenerationParams } from './hooks/useGenerationParams';
 import { useImageGeneration } from './hooks/useImageGeneration';
@@ -28,6 +28,7 @@ export default function App() {
     setSelectedMsgId,
     patchSelectedParams,
     setMsgRef,
+    clearHistory,
   } = chatState;
 
   // Image generation (includes dream mode)
@@ -47,7 +48,37 @@ export default function App() {
     setDreamInterval,
     inflightCount,
     serverLabel,
+    getImageFromCache,
+    getCacheStats,
+    clearCache,
   } = generation;
+
+  // Reload cached images on startup
+  useEffect(() => {
+    const reloadCachedImages = async () => {
+      const needsReload = messages.filter(
+        (m) => m.kind === 'image' && m.needsReload && m.params
+      );
+      if (needsReload.length === 0) return;
+
+      console.log(`[App] Reloading ${needsReload.length} images from cache...`);
+
+      for (const msg of needsReload) {
+        const imageUrl = await getImageFromCache(msg.params);
+        if (imageUrl) {
+          updateMessage(msg.id, { imageUrl, needsReload: false });
+          console.log(`[App] Reloaded ${msg.id.slice(0, 8)}`);
+        } else {
+          updateMessage(msg.id, { needsReload: false, cacheExpired: true });
+          console.log(`[App] Cache miss for ${msg.id.slice(0, 8)}`);
+        }
+      }
+    };
+
+    reloadCachedImages();
+    // Only run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Generation parameters (draft + selected)
   const params = useGenerationParams(
@@ -121,6 +152,29 @@ export default function App() {
   );
 
   /**
+   * Apply a seed delta to selected image and regenerate.
+   */
+  const onApplySeedDelta = useCallback(
+    (delta) => {
+      if (!selectedParams) return;
+      const currentSeed = Number(selectedParams.seed) || 0;
+      const newSeed = currentSeed + delta;
+      // Trigger regeneration with new seed
+      runGenerate({
+        prompt: selectedParams.prompt,
+        size: selectedParams.size,
+        steps: selectedParams.steps,
+        cfg: selectedParams.cfg,
+        seedMode: 'fixed',
+        seed: newSeed,
+        superresLevel: selectedParams.superresLevel ?? 0,
+        targetMessageId: selectedMsgId,
+      });
+    },
+    [selectedParams, selectedMsgId, runGenerate]
+  );
+
+  /**
    * Handle super-resolution upload.
    */
   const onSuperResUpload = useCallback(() => {
@@ -176,6 +230,7 @@ export default function App() {
               onSend,
               onCancelAll: cancelAll,
               onKeyDown,
+              onFocus: clearSelection,
               disabled: !params.effective.prompt.trim(),
               currentParams: {
                 size: params.effective.size,
@@ -201,6 +256,7 @@ export default function App() {
             selectedMsgId={selectedMsgId}
             onClearSelection={clearSelection}
             onApplyPromptDelta={onApplyPromptDelta}
+            onApplySeedDelta={onApplySeedDelta}
             onRerunSelected={onRerunSelected}
             dreamState={{
               isDreaming,

@@ -50,6 +50,163 @@
   isolation: isolate;
 }
 
+/* Active generation - thick flowing silver gradient border */
+@property --generating-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes generating-rotate {
+  0% { --generating-angle: 0deg; }
+  100% { --generating-angle: 360deg; }
+}
+
+.image-generating-border {
+  position: relative;
+  isolation: isolate;
+}
+
+.image-generating-border::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 8px;
+  padding: 8px;
+  background: conic-gradient(
+    from var(--generating-angle),
+    #e2e8f0,
+    #b4c5de,
+    #8391a3,
+    #64748b,        
+    #64748b,
+    #475569,
+    #616367,
+    #494b4e,
+    #0e0d0d
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: generating-rotate 2s linear infinite;
+  z-index: -1;
+}
+
+/* Error border - thick flowing red/black gradient */
+@property --error-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes error-rotate {
+  0% { --error-angle: 0deg; }
+  100% { --error-angle: 360deg; }
+}
+
+.image-error-border {
+  position: relative;
+  isolation: isolate;
+}
+
+.image-error-border::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 16px;
+  padding: 4px;
+  background: conic-gradient(
+    from var(--error-angle),
+    #000000,
+    #450a0a,
+    #dc2626,
+    #ef4444,
+    #dc2626,
+    #450a0a,
+    #000000,
+    #1c1917,
+    #000000
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: error-rotate 2s linear infinite;
+  z-index: -1;
+}
+
+/* Selection border - thick flowing primary gradient */
+@property --selection-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes selection-rotate {
+  0% { --selection-angle: 0deg; }
+  100% { --selection-angle: 360deg; }
+}
+
+.image-selected-border {
+  position: relative;
+  isolation: isolate;
+}
+
+.image-selected-border::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 16px;
+  padding: 4px;
+  background: conic-gradient(
+    from var(--selection-angle),
+    hsl(var(--primary)),
+    hsl(var(--primary) / 0.7),
+    hsl(var(--primary) / 0.4),
+    hsl(var(--primary) / 0.7),
+    hsl(var(--primary)),
+    hsl(var(--primary) / 0.8),
+    hsl(var(--primary) / 0.5),
+    hsl(var(--primary) / 0.8),
+    hsl(var(--primary))
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: selection-rotate 3s linear infinite;
+  z-index: -1;
+}
+
+/* Image container with buffer space for indicators */
+.image-frame {
+  padding: 8px;
+  border-radius: 20px;
+  background: transparent;
+  transition: background-color 0.2s;
+}
+
+.image-frame:hover {
+  background: hsl(var(--muted) / 0.3);
+}
+
+.image-frame.selected {
+  background: hsl(var(--primary) / 0.08);
+}
+
 /* Placeholder for pending image generations */
 .image-placeholder {
   display: flex;

@@ -12,8 +12,9 @@ import {
   extractGenerationMetadata,
   parseApiBases,
   normalizeBase,
-  
+
 } from './helpers';
+import { createCache, generateCacheKey } from './cache';
 
 /* ============================================================================
  * API CONFIGURATION
@@ -437,16 +438,20 @@ export function createAbortManager() {
 
 /**
  * Create a complete API client with all functionality.
- * Combines generation, SR, blob management, and abort handling.
- * 
+ * Combines generation, SR, blob management, abort handling, and caching.
+ *
  * @param {object} apiConfig - API configuration from createApiConfig()
+ * @param {object} [cacheOptions] - Optional cache configuration
+ * @param {boolean} [cacheOptions.enabled=true] - Enable/disable caching
+ * @param {number} [cacheOptions.maxEntries=500] - Max cached entries
+ * @param {number} [cacheOptions.maxBytes] - Max cache size in bytes
  * @returns {object} API client with all methods
- * 
+ *
  * @example
  * const config = createApiConfig();
  * const api = createApiClient(config);
- * 
- * // Generate image
+ *
+ * // Generate image (automatically cached)
  * const result = await api.generate({
  *   prompt: "a sunset",
  *   size: "512x512",
@@ -456,26 +461,59 @@ export function createAbortManager() {
  *   superres: false,
  *   superresLevel: 0
  * });
- * 
+ *
  * // Super-resolve uploaded image
  * const srResult = await api.superResolve({ file, magnitude: 2 });
- * 
+ *
  * // Cleanup on unmount
  * api.cleanup();
  */
-export function createApiClient(apiConfig) {
+export function createApiClient(apiConfig, cacheOptions = {}) {
+  const {
+    enabled: cacheEnabled = true,
+    ...cacheConfig
+  } = cacheOptions;
+
   const pickApiBase = createRoundRobinPicker(apiConfig);
   const blobManager = createBlobUrlManager();
   const abortManager = createAbortManager();
+  const cache = cacheEnabled ? createCache(cacheConfig) : null;
+
+  // Track cache stats
+  let cacheHits = 0;
+  let cacheMisses = 0;
 
   return {
     /**
-     * Generate an image with automatic API base selection and tracking.
+     * Generate an image with automatic API base selection, tracking, and caching.
      */
     async generate(params, requestId = null) {
+      // Generate cache key from deterministic params
+      const cacheKey = generateCacheKey(params);
+
+      // Check cache first
+      if (cache) {
+        const cached = await cache.get(cacheKey);
+        if (cached) {
+          cacheHits++;
+          console.log(`[Cache] HIT for ${cacheKey.slice(0, 8)}... (${cacheHits}/${cacheHits + cacheMisses})`);
+
+          // Create fresh blob URL from cached blob
+          const imageUrl = URL.createObjectURL(cached.blob);
+          blobManager.add(imageUrl);
+
+          return {
+            imageUrl,
+            metadata: cached.metadata,
+            fromCache: true,
+          };
+        }
+        cacheMisses++;
+      }
+
       const apiBase = pickApiBase();
       const controller = new AbortController();
-      
+
       if (requestId) {
         abortManager.add(requestId, controller);
       }
@@ -483,7 +521,20 @@ export function createApiClient(apiConfig) {
       try {
         const result = await generateImage(apiBase, params, controller.signal);
         blobManager.add(result.imageUrl);
-        return result;
+
+        // Store in cache (async, don't block)
+        if (cache) {
+          // Fetch the blob from the object URL to store
+          fetch(result.imageUrl)
+            .then((res) => res.blob())
+            .then((blob) => {
+              cache.set(cacheKey, blob, result.metadata);
+              console.log(`[Cache] STORED ${cacheKey.slice(0, 8)}... (${blob.size} bytes)`);
+            })
+            .catch((err) => console.warn('[Cache] Failed to store:', err));
+        }
+
+        return { ...result, fromCache: false };
       } finally {
         if (requestId) {
           abortManager.remove(requestId);
@@ -541,6 +592,7 @@ export function createApiClient(apiConfig) {
     cleanup() {
       abortManager.abortAll();
       blobManager.cleanup();
+      // Note: Don't close cache - it persists across sessions
     },
 
     /**
@@ -548,6 +600,44 @@ export function createApiClient(apiConfig) {
      */
     get config() {
       return apiConfig;
+    },
+
+    /**
+     * Get cache statistics.
+     */
+    async getCacheStats() {
+      if (!cache) {
+        return { enabled: false };
+      }
+      const stats = await cache.stats();
+      return {
+        enabled: true,
+        ...stats,
+        hits: cacheHits,
+        misses: cacheMisses,
+        hitRate: cacheHits + cacheMisses > 0
+          ? cacheHits / (cacheHits + cacheMisses)
+          : 0,
+      };
+    },
+
+    /**
+     * Clear the cache.
+     */
+    async clearCache() {
+      if (cache) {
+        await cache.clear();
+        cacheHits = 0;
+        cacheMisses = 0;
+        console.log('[Cache] Cleared');
+      }
+    },
+
+    /**
+     * Check if caching is enabled.
+     */
+    get cacheEnabled() {
+      return !!cache;
     },
   };
 }

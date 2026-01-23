@@ -112,14 +112,15 @@ export function MessageBubble({ msg, isSelected, onSelect, onCancel }) {
       ? '' // No background for image-only
       : 'bg-muted';
 
-  const selectedRing = isSelected ? 'ring-2 ring-primary ring-offset-2' : 'ring-0';
+  // Selection ring for non-image messages only (images use CSS glow via image-frame)
+  const selectedRing = isSelected && !isImageOnly ? 'ring-2 ring-primary ring-offset-2' : '';
   const clickable = msg.kind === MESSAGE_KINDS.IMAGE || msg.isRegenerating
-    ? 'cursor-pointer hover:ring-1 hover:ring-primary/30'
+    ? 'cursor-pointer'
     : '';
 
   // Different wrapper styles for image-only vs text messages
   const wrapperClass = isImageOnly
-    ? 'max-w-[92%] transition-all ' + selectedRing + ' ' + clickable
+    ? 'max-w-[92%] transition-all ' + clickable
     : 'max-w-[92%] rounded-2xl px-4 py-3 shadow-sm transition-all ' + bubbleColor + ' ' + selectedRing + ' ' + clickable;
 
   return (
@@ -146,29 +147,53 @@ export function MessageBubble({ msg, isSelected, onSelect, onCancel }) {
         {(msg.kind === MESSAGE_KINDS.IMAGE || msg.isRegenerating) && msg.imageUrl ? (
 
           <div className={msg.text ? 'mt-3' : ''}>
-            <div className="inline-block relative">
-              <img
-                src={msg.imageUrl}
-                alt="generation"
+            {/* Image frame with buffer space for indicators */}
+            <div
+              className={
+                'image-frame inline-block' +
+                (isSelected ? ' selected' : '')
+              }
+            >
+              <div
                 className={
-                  'max-h-[520px] w-auto rounded-xl border bg-background shadow-sm' +
-                  (msg.isRegenerating ? ' opacity-60' : '')
+                  'inline-block relative rounded-xl' +
+                  (msg.isRegenerating ? ' image-generating-border' : '') +
+                  (msg.hasError && !msg.isRegenerating ? ' image-error-border' : '') +
+                  (isSelected && !msg.hasError && !msg.isRegenerating ? ' image-selected-border' : '')
                 }
-                loading="lazy"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelect?.();
-                }}
-              />
-              {/* Regenerating overlay - floats above image, no layout shift */}
-              {msg.isRegenerating && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="flex items-center gap-2 bg-black/60 text-white text-sm px-3 py-1.5 rounded-full backdrop-blur-sm">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Regenerating</span>
+              >
+                <img
+                  src={msg.imageUrl}
+                  alt="generation"
+                  className={
+                    'max-h-[520px] w-auto rounded-xl bg-background' +
+                    (msg.isRegenerating ? ' opacity-60' : '')
+                  }
+                  loading="lazy"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect?.();
+                  }}
+                />
+                {/* Regenerating overlay - floats above image, no layout shift */}
+                {msg.isRegenerating && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="flex items-center gap-2 bg-black/60 text-white text-sm px-3 py-1.5 rounded-full backdrop-blur-sm">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Regenerating</span>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+                {/* Error indicator tooltip */}
+                {msg.hasError && msg.errorText && (
+                  <div
+                    className="absolute bottom-2 left-2 right-2 bg-red-900/90 text-white text-xs px-2 py-1 rounded backdrop-blur-sm truncate"
+                    title={msg.errorText}
+                  >
+                    {msg.errorText}
+                  </div>
+                )}
+              </div>
             </div>
           
 

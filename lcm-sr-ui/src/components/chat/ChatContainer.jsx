@@ -70,6 +70,7 @@ export function ChatContainer({
           onSend={composer.onSend}
           onCancelAll={composer.onCancelAll}
           onKeyDown={composer.onKeyDown}
+          onFocus={composer.onFocus}
           inflightCount={inflightCount}
           disabled={composer.disabled}
           currentParams={composer.currentParams}

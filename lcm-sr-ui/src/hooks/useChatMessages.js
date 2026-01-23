@@ -1,8 +1,52 @@
 // src/hooks/useChatMessages.js
 
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { nowId } from '../utils/helpers';
 import { UI_MESSAGES, MESSAGE_KINDS, MESSAGE_ROLES } from '../utils/constants';
+
+const STORAGE_KEY = 'lcm-chat-messages';
+
+/**
+ * Load messages from localStorage.
+ * Returns null if not found or invalid.
+ */
+function loadPersistedMessages() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) return null;
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    // Mark image messages as needing reload (blob URLs don't persist)
+    return parsed.map((msg) => {
+      if (msg.kind === MESSAGE_KINDS.IMAGE && msg.imageUrl) {
+        return { ...msg, imageUrl: null, needsReload: true };
+      }
+      return msg;
+    });
+  } catch (err) {
+    console.warn('[Chat] Failed to load persisted messages:', err);
+    return null;
+  }
+}
+
+/**
+ * Save messages to localStorage.
+ * Strips blob URLs (they don't persist).
+ */
+function persistMessages(messages) {
+  try {
+    // Don't persist blob URLs - they're session-only
+    const toSave = messages.map((msg) => {
+      if (msg.imageUrl?.startsWith('blob:')) {
+        return { ...msg, imageUrl: null, needsReload: true };
+      }
+      return msg;
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  } catch (err) {
+    console.warn('[Chat] Failed to persist messages:', err);
+  }
+}
 
 /**
  * Hook for managing chat messages and selection state.
@@ -24,19 +68,31 @@ import { UI_MESSAGES, MESSAGE_KINDS, MESSAGE_ROLES } from '../utils/constants';
  * } = useChatMessages();
  */
 export function useChatMessages() {
-  // Message list with initial system message
-  const [messages, setMessages] = useState(() => [
-    {
-      id: nowId(),
-      role: MESSAGE_ROLES.ASSISTANT,
-      kind: MESSAGE_KINDS.SYSTEM,
-      text: UI_MESSAGES.INITIAL_SYSTEM,
-      ts: Date.now(),
-    },
-  ]);
+  // Message list - load from localStorage or use initial system message
+  const [messages, setMessages] = useState(() => {
+    const persisted = loadPersistedMessages();
+    if (persisted) {
+      console.log(`[Chat] Restored ${persisted.length} messages from storage`);
+      return persisted;
+    }
+    return [
+      {
+        id: nowId(),
+        role: MESSAGE_ROLES.ASSISTANT,
+        kind: MESSAGE_KINDS.SYSTEM,
+        text: UI_MESSAGES.INITIAL_SYSTEM,
+        ts: Date.now(),
+      },
+    ];
+  });
 
   // Currently selected message ID (for editing params)
   const [selectedMsgId, setSelectedMsgId] = useState(null);
+
+  // Persist messages to localStorage on change
+  useEffect(() => {
+    persistMessages(messages);
+  }, [messages]);
 
   // Refs to DOM elements for each message (for scrolling)
   const msgRefs = useRef(new Map());
@@ -207,6 +263,72 @@ export function useChatMessages() {
     };
   }, []);
 
+  /**
+   * Reload images from cache for messages marked with needsReload.
+   * Call this on app init with the cache instance.
+   * @param {object} cache - Cache with get() method
+   * @param {function} keyFn - Function to generate cache key from params
+   */
+  const reloadImagesFromCache = useCallback(async (cache, keyFn) => {
+    if (!cache) return;
+
+    const toReload = messages.filter(
+      (m) => m.kind === MESSAGE_KINDS.IMAGE && m.needsReload && m.params
+    );
+
+    if (toReload.length === 0) return;
+
+    console.log(`[Chat] Reloading ${toReload.length} images from cache...`);
+
+    for (const msg of toReload) {
+      try {
+        const cacheKey = keyFn(msg.params);
+        const cached = await cache.get(cacheKey);
+
+        if (cached?.blob) {
+          const imageUrl = URL.createObjectURL(cached.blob);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === msg.id
+                ? { ...m, imageUrl, needsReload: false }
+                : m
+            )
+          );
+          console.log(`[Chat] Reloaded image for message ${msg.id.slice(0, 8)}`);
+        } else {
+          // Not in cache - mark as unavailable
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === msg.id
+                ? { ...m, needsReload: false, cacheExpired: true }
+                : m
+            )
+          );
+        }
+      } catch (err) {
+        console.warn(`[Chat] Failed to reload image ${msg.id}:`, err);
+      }
+    }
+  }, [messages]);
+
+  /**
+   * Clear all chat history and reset to initial state.
+   */
+  const clearHistory = useCallback(() => {
+    setMessages([
+      {
+        id: nowId(),
+        role: MESSAGE_ROLES.ASSISTANT,
+        kind: MESSAGE_KINDS.SYSTEM,
+        text: UI_MESSAGES.INITIAL_SYSTEM,
+        ts: Date.now(),
+      },
+    ]);
+    setSelectedMsgId(null);
+    localStorage.removeItem(STORAGE_KEY);
+    console.log('[Chat] History cleared');
+  }, []);
+
   return {
     // State
     messages,
@@ -237,5 +359,9 @@ export function useChatMessages() {
     createUserMessage,
     createPendingMessage,
     createErrorMessage,
+
+    // Persistence
+    reloadImagesFromCache,
+    clearHistory,
   };
 }

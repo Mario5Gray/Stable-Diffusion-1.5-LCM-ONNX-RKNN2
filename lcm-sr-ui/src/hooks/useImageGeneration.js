@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useEffect, useState } from 'react';
 import { createApiClient, createApiConfig } from '../utils/api';
+import { createCache, generateCacheKey } from '../utils/cache';
 import { eightDigitSeed, clampInt, safeJsonString, nowId } from '../utils/helpers';
 import {
   STEPS_CONFIG,
@@ -107,22 +108,28 @@ function mutateParams(baseParams, temperature = 0.3) {
  * @returns {object} Generation functions and state
  */
 export function useImageGeneration(addMessage, updateMessage, setSelectedMsgId) {
-  // API client (created once)
+  // API client and cache (created once)
   const apiClientRef = useRef(null);
-  
+  const cacheRef = useRef(null);
+
   // Dream mode state
   const [isDreaming, setIsDreaming] = useState(false);
   const [dreamTemperature, setDreamTemperature] = useState(0.3); // 0-1
   const [dreamInterval, setDreamInterval] = useState(5000); // ms between dreams
+  const [guideImage, setGuideImage] = useState(null); // { url, prompt } when user clicks "Guide Dream"
   const dreamTimerRef = useRef(null);
   const dreamParamsRef = useRef(null);
   
-  // Initialize API client
+  // Initialize cache and API client
+  if (!cacheRef.current) {
+    cacheRef.current = createCache();
+  }
   if (!apiClientRef.current) {
     const config = createApiConfig();
     apiClientRef.current = createApiClient(config);
   }
 
+  const cache = cacheRef.current;
   const api = apiClientRef.current;
 
   /**
@@ -227,9 +234,12 @@ export function useImageGeneration(addMessage, updateMessage, setSelectedMsgId) 
         );
 
         // Update message with result (no text - just the image)
+        // Clear any previous error state
         updateMessage(assistantId, {
           kind: MESSAGE_KINDS.IMAGE,
           isRegenerating: false,
+          hasError: false,
+          errorText: null,
           text: null,
           imageUrl: result.imageUrl,
           params: {
@@ -260,10 +270,15 @@ export function useImageGeneration(addMessage, updateMessage, setSelectedMsgId) 
           err?.name === ABORT_ERROR_NAME
             ? UI_MESSAGES.CANCELED
             : err?.message || String(err);
+        // Preserve image frame if it exists (in-place regen failure)
+        // Set hasError flag for red glow indicator instead of destroying image
         updateMessage(assistantId, {
-          kind: MESSAGE_KINDS.ERROR,
+          kind: targetMessageId ? MESSAGE_KINDS.IMAGE : MESSAGE_KINDS.ERROR,
           isRegenerating: false,
-          text: errMsg,
+          hasError: true,
+          errorText: errMsg,
+          // Don't set text - error shows via border glow
+          text: targetMessageId ? null : errMsg,
         });
         return null;
       }
@@ -423,15 +438,51 @@ export function useImageGeneration(addMessage, updateMessage, setSelectedMsgId) 
     ? `RR (${api.config.bases.length} backends)`
     : api.config.single || '(same origin)';
 
+  /**
+   * Get an image from cache by params.
+   * Returns blob URL if found, null otherwise.
+   */
+  const getImageFromCache = useCallback(async (params) => {
+    if (!cache) return null;
+    try {
+      const key = generateCacheKey(params);
+      const entry = await cache.get(key);
+      if (entry?.blob) {
+        return URL.createObjectURL(entry.blob);
+      }
+    } catch (err) {
+      console.warn('[Cache] getImageFromCache failed:', err);
+    }
+    return null;
+  }, [cache]);
+
+  /**
+   * Get cache stats.
+   */
+  const getCacheStats = useCallback(async () => {
+    if (!cache) return { enabled: false };
+    return await cache.stats();
+  }, [cache]);
+
+  /**
+   * Clear the image cache.
+   */
+  const clearCache = useCallback(async () => {
+    if (cache) {
+      await cache.clear();
+      console.log('[Cache] Cleared');
+    }
+  }, [cache]);
+
   return {
     // Generation
     runGenerate,
     runSuperResUpload,
-    
+
     // Cancellation
     cancelRequest,
     cancelAll,
-    
+
     // Dream mode
     isDreaming,
     startDreaming,
@@ -441,7 +492,12 @@ export function useImageGeneration(addMessage, updateMessage, setSelectedMsgId) 
     setDreamTemperature,
     dreamInterval,
     setDreamInterval,
-    
+
+    // Cache
+    getImageFromCache,
+    getCacheStats,
+    clearCache,
+
     // State
     inflightCount: api.inflightCount,
     serverLabel,

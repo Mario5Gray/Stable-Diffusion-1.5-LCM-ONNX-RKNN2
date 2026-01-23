@@ -14,6 +14,7 @@ export function MessageComposer({
   onSend,
   onCancelAll,
   onKeyDown,
+  onFocus,
   inflightCount,
   disabled,
   currentParams,
@@ -28,6 +29,7 @@ export function MessageComposer({
           value={prompt}
           onChange={(e) => onPromptChange(e.target.value)}
           onKeyDown={onKeyDown}
+          onFocus={onFocus}
           placeholder="Describe what you want to generate…"
           className="min-h-[52px] max-h-[200px] resize-none rounded-2xl"
         />
