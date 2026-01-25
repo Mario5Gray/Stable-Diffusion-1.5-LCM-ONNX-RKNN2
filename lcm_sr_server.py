@@ -49,11 +49,15 @@ import numpy as np
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+
 from pydantic import BaseModel, Field
 
 from diffusers import LCMScheduler
 from transformers import CLIPTokenizer
 from PIL import Image
+
+from server.comfy_routes import router as comfy_router
 
 # lcm_sr_server.py (add near imports)
 from compat_endpoints import CompatEndpoints
@@ -65,10 +69,6 @@ from backends.base import ModelPaths, Job
 BACKEND = os.environ.get("BACKEND", "auto").lower().strip()  # auto|rknn|cuda
 
 # Backend Worker Wrapper
-import io
-import numpy as np
-from PIL import Image
-
         
 # -----------------------------
 # Request schema (HTTP)
@@ -824,11 +824,21 @@ def storage_get(key: str):
 
 CompatEndpoints(app=app, run_generate=_run_generate_from_dict).mount()
 
+# Comfyui invoker
+app.include_router(comfy_router)
+
 # UI static mount (serves Vite dist)
 app.mount(
     "/",
     StaticFiles(directory="/opt/lcm-sr-server/ui-dist", html=True),
     name="ui",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://enigma:5173","http://enigma.lan:4200", "https://enigma4201", "http://enigma:4200", "https://node2:4201"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 if __name__ == "__main__":

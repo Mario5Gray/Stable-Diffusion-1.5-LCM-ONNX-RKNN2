@@ -1,6 +1,9 @@
 ARG TARGETPLATFORM
 ARG BACKEND
 
+# CERTS
+FROM darkbit1001/certificate-base:latest AS certs
+
 # ---------- UI build stage ----------
 FROM node:20-trixie-slim AS ui-build
 
@@ -33,9 +36,6 @@ RUN if [ $BACKEND = "rknn" ]; then \
     ca-certificates curl build-essential libxext6 libxrender1 libsm6 git ffmpeg libgl1 libglib2.0-0 wget gnupg vim \
     && rm -rf /var/lib/apt/lists/* ; \
   fi && cp /tmp/librknnrt.so /usr/lib/librknnrt.so
-  
-
-
 
 RUN if [ "$BACKEND" = "cuda" ]; then \
     apt-get update && apt-get install -y \
@@ -51,6 +51,9 @@ RUN if [ "$BACKEND" = "cuda" ]; then \
      libcusparse-12-8; \
     fi
 
+# Install certs
+COPY --from=certs /usr/local/share/ca-certificates/*.crt /etc/ssl/certs/
+RUN update-ca-certificates
 
 # Install python deps
 # (Put your real requirements in requirements.txt)
@@ -59,10 +62,12 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy server code
+COPY server/ /app/server/
 COPY *.py /app/
 COPY start.sh /app/
 COPY backends/ /app/backends/
 COPY yume/ /app/yume/
+COPY invokers/ /app/invokers/
 
 RUN chmod +x /app/start.sh
 

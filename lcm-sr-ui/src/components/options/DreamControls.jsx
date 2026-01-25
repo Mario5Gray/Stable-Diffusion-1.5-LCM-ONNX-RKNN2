@@ -1,6 +1,6 @@
 // src/components/options/DreamControls.jsx
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
@@ -36,6 +36,14 @@ export function DreamControls({
   selectedParams,
   baseParams,
 }) {
+  const [isGuided, setIsGuided] = useState(false);
+
+  const handleGuideDream = () => {
+    onGuideDream(selectedParams);
+    setIsGuided(true);
+    setTimeout(() => setIsGuided(false), 1500);
+  };
+
   const temperatureLabel =
     dreamTemperature < 0.3
       ? 'Subtle variations'
@@ -123,11 +131,15 @@ export function DreamControls({
           {/* Guide Button (only show if image is selected) */}
           {selectedParams && (
             <Button
-              className="w-full gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-              onClick={() => onGuideDream(selectedParams)}
+              className={`w-full gap-2 transition-all duration-200 ${
+                isGuided
+                  ? 'bg-green-500 hover:bg-green-500 scale-95'
+                  : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
+              }`}
+              onClick={handleGuideDream}
             >
-              <Heart className="h-4 w-4" />
-              Guide Dream Toward This
+              <Heart className={`h-4 w-4 ${isGuided ? 'fill-current animate-pulse' : ''}`} />
+              {isGuided ? 'Guided!' : 'Guide Dream Toward This'}
             </Button>
           )}
 

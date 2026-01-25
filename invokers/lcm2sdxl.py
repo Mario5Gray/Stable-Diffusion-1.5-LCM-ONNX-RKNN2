@@ -197,7 +197,6 @@ class ComfyUIInvoker:
         if node_graph.get("error"):
             raise ComfyUIError(f"ComfyUI error: {node_graph.get('error')}")
 
-
 # -----------------------------------------------------------------------------
 # LCM -> SDXL workflow adapter for YOUR graph (IMG2IMG-5.json)
 # -----------------------------------------------------------------------------
@@ -269,6 +268,19 @@ class LCMtoSDXLWorkflow:
 
         return prompt
 
+    def set_input_image(self, filename: str, source: str = "image") -> "LCMtoSDXLWorkflow":
+        """
+        Your LoadImage node is id 46.
+        widgets_values = [ "<filename>", "image" ]
+        """
+        n = self._get_node_or_raise(46)
+        w = n.setdefault("widgets_values", [])
+        while len(w) < 2:
+            w.append(None)
+        w[0] = filename
+        w[1] = source  # usually "image"
+        return self
+
     def _apply_known_widget_scalars(self, prompt: Json) -> None:
         # KSampler node 50 widgets_values:
         # [seed, "fixed", steps, cfg, sampler_name, scheduler, denoise]
@@ -303,6 +315,18 @@ class LCMtoSDXLWorkflow:
             w = n4.get("widgets_values") or []
             if len(w) >= 1:
                 prompt["4"]["inputs"]["ckpt_name"] = str(w[0])
+
+        # LoadImage node 46 widgets_values: ["lcm_68859294-8.png", "image"]
+        n46 = self._get_node(46)
+        if n46:
+            w = n46.get("widgets_values") or []
+            if len(w) >= 1 and w[0]:
+                # ComfyUI LoadImage expects an input named "image" with the filename
+                prompt["46"]["inputs"]["image"] = str(w[0])
+
+        pg = wf.to_prompt_graph()
+        print(pg["46"])
+
 
     # --- High-level knobs (no prompt text required) ---
 

@@ -29,9 +29,9 @@ export function ChatHeader({
         <CardTitle className="text-xl">LCM + SR Chat</CardTitle>
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-          <Badge variant="secondary">{BADGE_LABELS.ENDPOINT}</Badge>
+{/*          <Badge variant="secondary">{BADGE_LABELS.ENDPOINT}</Badge>
           <Badge variant="secondary">{BADGE_LABELS.FORMAT}</Badge>
-
+*/}
           {/* Copy prompt badge */}
           <button
             type="button"
@@ -54,17 +54,20 @@ export function ChatHeader({
             <Badge variant="outline">{BADGE_LABELS.SR_OFF}</Badge>
           )}
 
+
+          {/* In-flight count */}
+          {inflightCount > 0 ? (
+            <Badge className="gap-1 animate-pulse bg-gradient-to-r from-white-200 to-blue-200">InFlight</Badge>
+          ) : (
+            <Badge variant="secondary">Inflight</Badge>
+          )}
+
           {/* Dream mode badge */}
           {isDreaming && (
             <Badge className="gap-1 animate-pulse bg-gradient-to-r from-purple-600 to-pink-600">
               <Sparkles className="h-3 w-3" />
               Dreaming
             </Badge>
-          )}
-
-          {/* In-flight count */}
-          {inflightCount > 0 && (
-            <Badge variant="secondary">{inflightCount} running</Badge>
           )}
         </div>
       </div>

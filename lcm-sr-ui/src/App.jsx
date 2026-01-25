@@ -1,6 +1,6 @@
 // src/App.jsx
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useChatMessages } from './hooks/useChatMessages';
 import { useGenerationParams } from './hooks/useGenerationParams';
 import { useImageGeneration } from './hooks/useImageGeneration';
@@ -8,6 +8,8 @@ import { ChatContainer } from './components/chat/ChatContainer';
 import { OptionsPanel } from './components/options/OptionsPanel';
 import { copyToClipboard } from './utils/helpers';
 import { SR_CONFIG } from './utils/constants';
+import { createComfyInvokerApi } from "./lib/comfyInvokerApi";
+import { useComfyJob } from "./hooks/useComfyJob";
 
 export default function App() {
   // ============================================================================
@@ -58,6 +60,7 @@ export default function App() {
     clearCache,
   } = generation;
 
+
   // Reload cached images on startup (only for blob URLs without server URL)
   useEffect(() => {
     const reloadCachedImages = async () => {
@@ -97,7 +100,7 @@ export default function App() {
     runGenerate,
     selectedMsgId
   );
-
+  
   // ============================================================================
   // LOCAL UI STATE
   // ============================================================================
@@ -219,6 +222,32 @@ export default function App() {
     [onSend]
   );
 
+  ///////
+  /// comfyUI invoker
+  ///////
+  const comfyApi = useMemo(() => createComfyInvokerApi("http://enigma.lan:8188"), []);
+  const comfy = useComfyJob({ api: comfyApi });
+
+  const onRunComfy = useCallback(async () => {
+  await comfy.start({
+    workflowId: "IMG2IMG-5",
+      params: {
+        // use your existing param system
+        steps: params.effective.steps,
+        cfg: params.effective.cfg,      
+        // include denoise if you track it; if not, omit
+        // denoise: params.effective.denoise,
+        // size if your backend uses it for resize nodes
+        size: params.effective.size,
+        // if you do want to pass prompt later, fine—but optional
+        // prompt: params.effective.prompt,
+      }, inputImageFile: uploadFile, // for img2img; can be null for txt2img
+    });
+    }, [comfy, params.effective, uploadFile]);
+
+  const onCancelComfy = useCallback(() => comfy.cancel(), [comfy]);
+
+
   // ============================================================================
   // RENDER
   // ============================================================================
@@ -289,6 +318,16 @@ export default function App() {
             srMagnitude={srMagnitude}
             onSrMagnitudeChange={setSrMagnitude}
             serverLabel={serverLabel}
+            onRunComfy={onRunComfy}
+            comfyState={comfy.state}
+            comfyIsBusy={comfy.isBusy}
+            comfyJob={comfy.job}
+            comfyError={comfy.error}
+            onCancelComfy={onCancelComfy}
+            onClearCache={clearCache}
+            getCacheStats={getCacheStats}
+            onClearHistory={clearHistory}
+
           />
         </div>
       </div>

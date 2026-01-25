@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Send } from 'lucide-react';
+import { Send, Trash2 } from 'lucide-react';
 import { DreamControls } from './DreamControls';
 import { SelectedImageControls } from './SelectedImageControls';
 import {
@@ -29,6 +29,7 @@ import {
   SCROLL_CONFIG,
 } from '../../utils/constants';
 import { formatSizeDisplay, sanitizeSeedInput } from '../../utils/helpers';
+import { ComfyOptions } from "./ComfyOptions";
 
 /**
  * Options panel component - right sidebar with all generation controls.
@@ -62,10 +63,23 @@ export function OptionsPanel({
   srMagnitude,
   onSrMagnitudeChange,
   serverLabel,
+  onRunComfy,
+  comfyIsBusy,
+  comfyState,
+  comfyJob,
+  comfyError,
+  onCancelComfy,
+  onClearCache,
+  getCacheStats,
+  onClearHistory,
 }) {
   const optionsScrollRef = useRef(null);
   const [canScrollDown, setCanScrollDown] = useState(false);
   const [canScrollUp, setCanScrollUp] = useState(false);
+
+  // Cache stats state
+  const [cacheStats, setCacheStats] = useState(null);
+  const [isClearing, setIsClearing] = useState(false);
 
   // Track selected image ID to sync only on selection change
   const prevSelectedId = useRef(null);
@@ -167,6 +181,51 @@ export function OptionsPanel({
     updateScrollHints();
   }, [updateScrollHints]);
 
+  // Fetch cache stats on mount and after clearing
+  const refreshCacheStats = useCallback(async () => {
+    if (getCacheStats) {
+      const stats = await getCacheStats();
+      setCacheStats(stats);
+    }
+  }, [getCacheStats]);
+
+  useEffect(() => {
+    refreshCacheStats();
+  }, [refreshCacheStats]);
+
+  // Handle clear cache and history
+  const handleClearCache = useCallback(async () => {
+    
+    setIsClearing(true);
+    try {
+      await onClearCache();
+      onClearHistory();
+      await refreshCacheStats();
+    } finally {
+      setIsClearing(false);
+    }
+  }, [onClearCache, onClearHistory, refreshCacheStats]);
+
+  // Format bytes for display
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+  };
+
+  function ComfyGenerator() {
+    const api = useMemo(() => createComfyInvokerApi("/api"), []);
+    const comfy = useComfyJob({ api });
+
+    const [options, setOptions] = useState({
+      cfg: 0.35,
+      steps: 12,
+      denoise: 0.3,
+    });
+  };
+
   return (
     <Card className="rounded-2xl shadow-sm h-full flex flex-col overflow-hidden">
       <CardHeader className="border-b">
@@ -209,6 +268,7 @@ export function OptionsPanel({
           <Separator />
 
           {/* Prompt */}
+          <div className="space-y-3 rounded-2xl border p-4 bg-gradient-to-br from-purple-50/50 to-pink-50/50 dark:from-purple-950/20 dark:to-pink-950/20">
           <div className="space-y-1">
             <Label>
               {selectedParams ? 'Selected image prompt' : 'Draft prompt'}
@@ -231,7 +291,7 @@ export function OptionsPanel({
               className="relative flex rounded-xl p-0.5 overflow-hidden"
               style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%)' }}
             >
-              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((v) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((v) => (
                 <button
                   key={v}
                   type="button"
@@ -247,10 +307,10 @@ export function OptionsPanel({
                 </button>
               ))}
             </div>
-            <div className="text-xs text-muted-foreground">
+{/*            <div className="text-xs text-muted-foreground">
               LCM typical: {STEPS_CONFIG.LCM_TYPICAL_MIN}–{STEPS_CONFIG.LCM_TYPICAL_MAX}. 0 = latent lock.
             </div>
-          </div>
+*/}          </div>
 
           {/* CFG - Segmented Control */}
           <div className="space-y-2">
@@ -349,7 +409,7 @@ export function OptionsPanel({
               </div>
             )}            
           </div>
-
+          </div>
           <Separator />
 
           {/* Seed */}
@@ -402,11 +462,6 @@ export function OptionsPanel({
               placeholder="seed"
             />
 
-            <div className="text-xs text-muted-foreground">
-              When Random: a new seed is chosen per request. When Fixed: the seed
-              field is used.
-            </div>
-
             {/* Seed Modifier - only when image is selected */}
           </div>
           {/* Size */}
@@ -430,28 +485,9 @@ export function OptionsPanel({
             </Select>
           </div>
 
-          <Separator />
-
-          {/* Selected Image Controls */}
-          {selectedParams ? (
-            <SelectedImageControls
-              selectedParams={selectedParams}
-              onClear={onClearSelection}
-              onApplyDelta={onApplyPromptDelta}
-              onRerun={onRerunSelected}
-            />
-          ) : (
-            <div className="text-xs text-muted-foreground rounded-lg bg-muted/50 p-3">
-              💡 Tip: Click an image to select it. Sliders will edit that image's
-              settings and regenerate live.
-            </div>
-          )}
-
-          <Separator />
-
           {/* Super-Resolution - Segmented Control */}
-          <div className="space-y-2">
-            <Label>Super-Resolution</Label>
+          <div className="space-y-1">
+            <Label className="text-base font-semibold">Super-Resolution</Label>
             <div
               className="relative flex rounded-xl p-0.5 overflow-hidden"
               style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%)' }}
@@ -482,6 +518,29 @@ export function OptionsPanel({
               Number of upscale passes. Higher = more detail, slower.
             </div>
           </div>
+          
+          <Separator />
+
+          <ComfyOptions workflowId="IMG2IMG-5" />
+          
+          <Separator />
+
+          {/* Selected Image Controls */}
+          {selectedParams ? (
+            <SelectedImageControls
+              selectedParams={selectedParams}
+              onClear={onClearSelection}
+              onApplyDelta={onApplyPromptDelta}
+              onRerun={onRerunSelected}
+            />
+          ) : (
+            <div className="text-xs text-muted-foreground rounded-lg bg-muted/50 p-3">
+              💡 Tip: Click an image to select it. Sliders will edit that image's
+              settings and regenerate live.
+            </div>
+          )}
+
+          <Separator />
 
           {/* Super-Resolution Upload */}
           <div className="space-y-3">
@@ -489,7 +548,7 @@ export function OptionsPanel({
 
             {/* Magnitude */}
             <div className="space-y-2">
-              <Label>Magnitude</Label>
+              <Label># Passes</Label>
               <Select
                 value={String(srMagnitude)}
                 onValueChange={(v) => onSrMagnitudeChange(Number(v))}
@@ -509,9 +568,6 @@ export function OptionsPanel({
                   ))}
                 </SelectContent>
               </Select>
-              <div className="text-xs text-muted-foreground">
-                Magnitude = number of SR passes. Default is 2.
-              </div>
             </div>
 
             {/* File Input */}
@@ -543,11 +599,41 @@ export function OptionsPanel({
 
           <Separator />
 
-          {/* Server Info */}
-          <div className="rounded-2xl bg-muted/40 p-3 text-xs text-muted-foreground">
-            <div className="font-medium text-foreground">Server base</div>
-            <div className="mt-1 break-all">{serverLabel}</div>
-            <div className="mt-2">Output: PNG only (per UI spec)</div>
+          {/* Cache Management */}
+          <div className="space-y-3">
+            <div className="font-medium">Image Cache</div>
+            {cacheStats && (
+              <div className="rounded-2xl bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+                <div className="flex justify-between">
+                  <span>Entries:</span>
+                  <span className="tabular-nums">{cacheStats.entries ?? 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Size:</span>
+                  <span className="tabular-nums">{formatBytes(cacheStats.bytes)}</span>
+                </div>
+                {cacheStats.maxBytes && (
+                  <div className="flex justify-between">
+                    <span>Usage:</span>
+                    <span className="tabular-nums">
+                      {((cacheStats.utilizationBytes ?? 0) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+            <Button
+              variant="outline"
+              className="w-full rounded-2xl"
+              onClick={handleClearCache}
+              disabled={isClearing}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {isClearing ? 'Clearing...' : 'Clear Messages'}
+            </Button>
+            <div className="text-xs text-muted-foreground">
+              Clears all messages and locally cached images from browser storage.
+            </div>
           </div>
         </CardContent>
       </div>
