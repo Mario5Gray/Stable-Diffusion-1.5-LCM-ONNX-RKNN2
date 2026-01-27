@@ -10,7 +10,7 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: ["enigma", "node2"],
+    allowedHosts: ["enigma", "node2", "http://enigma:4200","enigma:4200", "enigma:5173"],
     host: true,
     watch: {
       usePolling: true,
@@ -21,6 +21,7 @@ export default defineConfig({
       "/superres": "http://localhost:4200",
       "/v1": "http://localhost:4200",
       "/storage": "http://localhost:4200",
+      "/dreams": "http://localhost:4200",
     },
   },
 });

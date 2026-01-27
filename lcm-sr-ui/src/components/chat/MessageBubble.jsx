@@ -13,9 +13,13 @@ function Pill({ label, dark = false }) {
     <span
       className={
         'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ' +
+        'border backdrop-blur-sm transition-all ' +
         (dark
-          ? 'bg-black/20 text-white/90'
-          : 'bg-background/60 text-foreground border')
+          ? 'bg-black/30 text-white/90 border-white/10 shadow-sm ' +
+            'shadow-sm hover:shadow-md active:shadow-sm active:translate-y-[0.5px]'
+          : 'bg-background/70 text-foreground border-border/60 shadow-sm' +
+            'transition-all duration-150'
+          )
       }
     >
       {label}
@@ -141,9 +145,16 @@ export function MessageBubble({
     : 'max-w-[92%] rounded-2xl px-4 py-3 shadow-sm transition-all ' + bubbleColor + ' ' + selectedRing + ' ' + clickable;
 
   return (
-    <div
-      className={'flex w-full ' + (isUser ? 'justify-end' : 'justify-start')}
-    >
+      <div
+    className={`
+      flex items-start gap-3 max-w-[100%]
+      rounded-2xl items-center justify-center 
+      px-2 py-2
+      ${isSelected ? "bg-black/9 dark:bg-white/3" : ""}
+      transition-colors
+    `}
+  >
+
       <div
         className={wrapperClass}
         onClick={() => {

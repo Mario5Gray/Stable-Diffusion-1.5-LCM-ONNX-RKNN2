@@ -1,19 +1,27 @@
 // src/App.jsx
 
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
+import { useLatentExploration } from './hooks/useLatentExploration';
 import { useChatMessages } from './hooks/useChatMessages';
+import { useScrollManagement } from './hooks/useScrollManagement';
 import { useGenerationParams } from './hooks/useGenerationParams';
 import { useImageGeneration } from './hooks/useImageGeneration';
 import { ChatContainer } from './components/chat/ChatContainer';
 import { OptionsPanel } from './components/options/OptionsPanel';
+import { DreamGallery } from './components/dreams/DreamGallery';
 import { copyToClipboard } from './utils/helpers';
 import { SR_CONFIG } from './utils/constants';
+import { MessageSquare, Sparkles } from 'lucide-react';
 
 
 export default function App() {
   // ============================================================================
   // STATE MANAGEMENT VIA HOOKS
   // ============================================================================
+
+  // Tab navigation
+  const [activeTab, setActiveTab] = useState('chat'); // chat | dreams
 
   // Chat messages and selection
   const chatState = useChatMessages();
@@ -73,16 +81,12 @@ export default function App() {
       );
       if (needsReload.length === 0) return;
 
-      console.log(`[App] Reloading ${needsReload.length} images from local cache...`);
-
       for (const msg of needsReload) {
         const imageUrl = await getImageFromCache(msg.params);
         if (imageUrl) {
           updateMessage(msg.id, { imageUrl, needsReload: false });
-          console.log(`[App] Reloaded ${msg.id.slice(0, 8)}`);
         } else {
           updateMessage(msg.id, { needsReload: false, cacheExpired: true });
-          console.log(`[App] Cache miss for ${msg.id.slice(0, 8)}`);
         }
       }
     };
@@ -110,6 +114,10 @@ export default function App() {
 
   // Copy feedback
   const [copied, setCopied] = useState(false);
+
+  // API base from env
+
+  const apiBase = "";
 
   // ============================================================================
   // EVENT HANDLERS
@@ -186,6 +194,24 @@ export default function App() {
     [selectedParams, selectedMsgId, runGenerate]
   );
 
+  /* explicit selectedmessage state */
+  const selectedImage = useMemo(() => {
+
+    if (!selectedMsg) return null;
+    const url = selectedMsg.imageUrl;
+    if (!url) return null;
+
+    const image_filename = `chat_${selectedMsg.id}.png`
+    
+    return {
+      kind: "url",
+      url,
+      filename: image_filename,
+      source: "chat",
+      key: selectedMsg.id,
+    };
+  }, [selectedMsg]);
+
   /**
    * Handle super-resolution upload.
    */
@@ -221,13 +247,44 @@ export default function App() {
     [onSend]
   );
 
+const inputImage = useMemo(() => {  
+  if (uploadFile) return { kind: "file", file: uploadFile, source: "upload" };
+  
+  if (selectedImage) {  
+    return selectedImage; // {kind:"url", ...}
+  }
+  
+  return null;
+}, [uploadFile, selectedImage]);
 
   // ============================================================================
   // RENDER
   // ============================================================================
 
   return (
-    <div className="h-screen overflow-hidden bg-background text-foreground">
+<div className="h-screen overflow-hidden bg-background text-foreground">
+  <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+    {/* Tab Navigation */}
+    <div className="border-b px-4">
+      <TabsList className="h-12">
+        <TabsTrigger value="chat" className="gap-2">
+          <MessageSquare className="h-4 w-4" />
+          Main Chat
+        </TabsTrigger>
+        <TabsTrigger value="dreams" className="gap-2">
+          <Sparkles className="h-4 w-4" />
+          Dream Gallery
+          {isDreaming && (
+            <span className="ml-2 h-2 w-2 rounded-full bg-purple-600 animate-pulse" />
+          )}
+        </TabsTrigger>
+      </TabsList>
+    </div>
+
+{/* Tab Content */}
+<div className="flex-1 overflow-hidden">
+  {/* Main Chat Tab */}
+  <TabsContent value="chat" className="h-full m-0">        
       <div className="mx-auto max-w-6xl p-4 md:p-6 h-full">
         <div className="grid h-full grid-cols-1 gap-4 md:grid-cols-[1fr_360px]">
           {/* Chat Panel */}
@@ -268,7 +325,8 @@ export default function App() {
           />
 
           {/* Options Panel */}
-          <OptionsPanel
+          <OptionsPanel          
+            inputImage={inputImage}
             params={params}
             selectedParams={selectedParams}
             selectedMsgId={selectedMsgId}
@@ -299,6 +357,15 @@ export default function App() {
           />
         </div>
       </div>
+    </TabsContent>
+
+          {/* Dream Gallery Tab */}
+          <TabsContent value="dreams" className="h-full m-0">
+            <DreamGallery apiBase={apiBase} />
+          </TabsContent>
+        </div>
+      </Tabs>
+
     </div>
   );
 }

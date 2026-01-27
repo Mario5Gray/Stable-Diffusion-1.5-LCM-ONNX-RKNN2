@@ -25,28 +25,13 @@ export function ChatHeader({
 }) {
   return (
     <CardHeader className="border-b">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-1">
         <CardTitle className="text-xl">LCM + SR Chat</CardTitle>
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
 {/*          <Badge variant="secondary">{BADGE_LABELS.ENDPOINT}</Badge>
           <Badge variant="secondary">{BADGE_LABELS.FORMAT}</Badge>
 */}
-          {/* Copy prompt badge */}
-          <button
-            type="button"
-            onClick={onCopyPrompt}
-            className="inline-flex"
-            title={UI_MESSAGES.COPY_PROMPT_TIP}
-          >
-            <Badge
-              variant="outline"
-              className="bg-background cursor-pointer hover:bg-muted transition-colors"
-            >
-              {copied ? UI_MESSAGES.COPIED : UI_MESSAGES.COPY_PROMPT}
-            </Badge>
-          </button>
-
           {/* SR badge */}
           {srLevel > 0 ? (
             <Badge>SR {srLevel}</Badge>
@@ -56,16 +41,16 @@ export function ChatHeader({
 
 
           {/* In-flight count */}
-          {inflightCount > 0 ? (
+{/*          {inflightCount > 0 ? (
             <Badge className="gap-1 animate-pulse bg-gradient-to-r from-white-200 to-blue-200">InFlight</Badge>
           ) : (
             <Badge variant="secondary">Inflight</Badge>
           )}
-
+*/}
           {/* Dream mode badge */}
           {isDreaming && (
             <Badge className="gap-1 animate-pulse bg-gradient-to-r from-purple-600 to-pink-600">
-              <Sparkles className="h-3 w-3" />
+              <Sparkles className="h-1 w-1" />
               Dreaming
             </Badge>
           )}

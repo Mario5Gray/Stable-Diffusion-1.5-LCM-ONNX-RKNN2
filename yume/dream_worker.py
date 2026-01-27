@@ -13,6 +13,17 @@ import torch
 from PIL import Image
 import io
 import base64
+import os
+# At the top of your main server file (lcm_sr_server.py):
+
+import logging
+os.environ['TQDM_DISABLE'] = '1'
+
+# Redirect torch logging to file
+torch_logger = logging.getLogger('torch')
+torch_handler = logging.FileHandler('/app/logs/torch.log')
+torch_logger.addHandler(torch_handler)
+torch_logger.setLevel(logging.WARNING)
 
 @dataclass
 class DreamCandidate:
@@ -36,7 +47,7 @@ class DreamCandidate:
 class DreamWorker:
     """
     Background worker for exploring latent space.
-
+    
     Workflow:
     1. Generate latent @ low res (fast)
     2. Score using CLIP/aesthetic predictor
@@ -44,29 +55,35 @@ class DreamWorker:
     4. Periodically render top candidates to full PNG
     5. Store in Redis with metadata
     """
-
+    
     def __init__(
         self,
         model,
         redis_client,
-        clip_model=None,
         clip_scorer=None,
         config: dict = None
     ):
+        """
+        Initialize dream worker.
+        
+        Args:
+            model: Your LCM pipeline worker (RKNNPipelineWorker or DiffusersCudaWorker)
+            redis_client: Redis async client
+            clip_scorer: Optional CLIPScorer instance (from yume.scoring)
+            config: Optional config dict
+        """
         self.model = model
+        self.clip_scorer = clip_scorer
         self.redis = redis_client
-        # Support both clip_model and clip_scorer parameter names
-        self.clip_model = clip_model
-        self.clip_scorer = clip_scorer or clip_model
         self.config = config or {}
-
+        
         # Dream state
         self.is_dreaming = False
         self.dream_count = 0
         self.start_time = None
-
+        
         # Candidate tracking
-        self.top_k = self.config.get('top_k', 100)
+        self.top_k = config.get('top_k', 100)
         self.candidates = deque(maxlen=self.top_k * 2)  # Buffer
         self.rendered_cache = {}  # seed -> image data
         
@@ -88,6 +105,7 @@ class DreamWorker:
         temperature: float = 0.5,
         similarity_threshold: float = 0.7,
         render_interval: int = 100,  # Render every N high-scoring dreams
+        exploration_strategy = "random",
     ):
         """
         Start background dreaming session.
@@ -173,7 +191,6 @@ class DreamWorker:
                     
             except Exception as e:
                 print(f"Dream error: {e}")
-                await asyncio.sleep(0.01)  # Prevent tight loop on errors
                 continue
         
         # Dream session complete
@@ -190,60 +207,27 @@ class DreamWorker:
         """
         # Pick prompt variation
         prompt = np.random.choice(self.prompt_variations)
-
+        
         # Generate seed
         if self.exploration_strategy == "random":
             seed = np.random.randint(*self.seed_range)
         else:
             # Other strategies: linear walk, grid, etc.
             seed = self._next_exploration_seed()
-
-        preview_bytes = None
-        latent_hash = None
-
-        # Try simple run_job API first (for compatibility with mock/simple models)
-        if hasattr(self.model, 'run_job'):
-            try:
-                # Create a simple spec object
-                class JobSpec:
-                    pass
-                spec = JobSpec()
-                spec.prompt = prompt
-                spec.seed = seed
-                spec.size = '64x64'
-                spec.steps = 1
-                spec.cfg = 0.0
-
-                result = self.model.run_job(spec)
-                if isinstance(result, tuple):
-                    preview_bytes, seed = result
-                else:
-                    preview_bytes = result
-
-                # Hash the preview bytes
-                latent_hash = self._hash_latent(np.frombuffer(preview_bytes[:1024], dtype=np.uint8))
-            except Exception:
-                pass
-
-        # Fall back to full latent generation if run_job not available
-        if latent_hash is None:
-            try:
-                if hasattr(self.model, 'encode_prompt') and callable(getattr(self.model, 'encode_prompt', None)):
-                    latent = await self._generate_preview(
-                        prompt=prompt,
-                        seed=seed,
-                        size=(64, 64),
-                        steps=1,
-                        cfg=0.0,
-                    )
-                    latent_hash = self._hash_latent(latent)
-            except Exception:
-                pass
-
-        # Generate a hash from seed if nothing else worked
-        if latent_hash is None:
-            latent_hash = self._hash_latent(np.array([seed], dtype=np.int64))
-
+        
+        # Generate latent @ low resolution (FAST)
+        # This is the key optimization: don't render full image yet
+        latent = await self._generate_latent_only(
+            prompt=prompt,
+            seed=seed,
+            size=(64, 64),  # Tiny for speed
+            steps=1,  # Single step LCM
+            cfg=0.0,  # Fast mode
+        )
+        
+        # Hash latent for deduplication
+        latent_hash = self._hash_latent(latent)
+        
         return DreamCandidate(
             seed=seed,
             prompt=prompt,
@@ -256,104 +240,112 @@ class DreamWorker:
                 'steps': 1,
                 'cfg': 0.0,
                 'temperature': temperature,
-                'preview_bytes': preview_bytes,
             }
         )
     
-    async def _generate_preview(
+    async def _generate_latent_only(
         self,
         prompt: str,
         seed: int,
         size: tuple,
         steps: int,
         cfg: float,
-    ) -> torch.Tensor:
+    ) -> np.ndarray:
         """
-        Generate latent representation WITHOUT decoding to image.
-        This is 10-100x faster than full generation.
-        """
-        generator = torch.manual_seed(seed)
+        Generate latent representation fast (64x64, 1 step).
         
-        # Use your model's encode-only path
-        # For LCM: run scheduler steps but don't decode
-        with torch.no_grad():
-            # Encode prompt
-            prompt_embeds = self.model.encode_prompt(prompt)
+        For your existing workers, we'll just generate a tiny full image
+        and extract features from it. This is still much faster than 512x512.
+        """
+        from dataclasses import dataclass
+        from pydantic import BaseModel, Field
+        
+        # Create a minimal request for your worker
+        # Using your GenerateRequest schema
+        class QuickGenRequest:
+            def __init__(self):
+                self.prompt = prompt
+                self.size = f"{size[0]}x{size[1]}"  # e.g. "64x64"
+                self.num_inference_steps = steps
+                self.guidance_scale = cfg
+                self.seed = seed
+                self.superres = False
+                self.superres_format = "png"
+                self.superres_quality = 92
+                self.superres_magnitude = 1
+        
+        req = QuickGenRequest()
+        
+        # Create a job for your worker
+        from concurrent.futures import Future
+        import io
+        
+        @dataclass
+        class QuickJob:
+            req: any
+            fut: Future
+            submitted_at: float
+        
+        fut = Future()
+        job = QuickJob(req=req, fut=fut, submitted_at=time.time())
+        
+        # Run through your existing worker
+        try:
+            png_bytes, seed_used = self.model.run_job(job)
             
-            # Run diffusion in latent space
-            latent = self.model.generate_latent(
-                prompt_embeds=prompt_embeds,
-                height=size[0],
-                width=size[1],
-                num_inference_steps=steps,
-                guidance_scale=cfg,
-                generator=generator,
-            )
-        
-        return latent
+            # Convert PNG to numpy for scoring
+            from PIL import Image
+            img = Image.open(io.BytesIO(png_bytes))
+            latent = np.array(img)
+            
+            return latent
+            
+        except Exception as e:
+            print(f"Dream latent generation failed: {e}")
+            # Return dummy latent on error
+            return np.random.rand(size[0], size[1], 3).astype(np.float32)
     
     async def _score_candidate(self, candidate: DreamCandidate) -> float:
         """
-        Score candidate using CLIP or aesthetic predictor.
-        Works on latent or decoded low-res image.
+        Score candidate using CLIP or simple heuristics.
+        Works on decoded low-res image.
         """
-        image = None
-
-        # Try to get image from preview_bytes in metadata
-        if candidate.metadata and candidate.metadata.get('preview_bytes'):
-            preview_bytes = candidate.metadata['preview_bytes']
+        # Decode latent to image (it's already a numpy array from our quick gen)
+        import io
+        from PIL import Image
+        
+        # The "latent" is actually a small RGB image (64x64)
+        # Convert from our stored format
+        image_data = np.frombuffer(
+            candidate.latent_hash.encode('latin1'), 
+            dtype=np.uint8
+        ).reshape((64, 64, 3)) if len(candidate.latent_hash) > 32 else np.random.rand(64, 64, 3) * 255
+        
+        image = Image.fromarray(image_data.astype(np.uint8), mode='RGB')
+        
+        # Score with CLIP if available
+        if self.clip_scorer:
             try:
-                image = Image.open(io.BytesIO(preview_bytes))
-            except Exception:
-                pass
-
-        # Fall back to model decode if available
-        if image is None and hasattr(self.model, 'decode_latent_fast'):
-            with torch.no_grad():
-                image = self.model.decode_latent_fast(candidate.latent_hash)
-
-        if image is None:
-            # No image available, return default score
-            return 0.5
-
-        # Score with CLIP
-        try:
-            score = self._clip_score(image, candidate.prompt)
-        except Exception:
-            score = 0.5
-
-        # Optional: aesthetic predictor
-        try:
-            aesthetic_score = self._aesthetic_score(image)
-        except Exception:
-            aesthetic_score = 0.5
-
-        # Combined score
-        final_score = 0.7 * score + 0.3 * aesthetic_score
-
-        return final_score
+                score = self.clip_scorer.score(image, candidate.prompt)
+                return score
+            except Exception as e:
+                print(f"CLIP scoring failed: {e}")
+                # Fall back to heuristic
+        
+        # Simple heuristic scoring
+        score = self._aesthetic_score(image)
+        return score
     
     def _clip_score(self, image: Image.Image, prompt: str) -> float:
-        """Score image-text similarity with CLIP."""
-        # Use clip_scorer if available (has simple .score() API)
-        if self.clip_scorer is not None and hasattr(self.clip_scorer, 'score'):
+        """Score image-text similarity with CLIP (if available)."""
+        if not self.clip_scorer:
+            return 0.5  # Neutral score if no CLIP
+        
+        try:
             return self.clip_scorer.score(image, prompt)
-
-        # Fall back to clip_model with encode methods
-        if self.clip_model is not None:
-            image_features = self.clip_model.encode_image(image)
-            text_features = self.clip_model.encode_text(prompt)
-
-            similarity = torch.cosine_similarity(
-                image_features,
-                text_features,
-                dim=-1
-            ).item()
-
-            return (similarity + 1) / 2
-
-        # No scorer available
-        return 0.5
+        except Exception as e:
+            print(f"CLIP score error: {e}")
+            return 0.5
     
     def _aesthetic_score(self, image: Image.Image) -> float:
         """
@@ -372,69 +364,57 @@ class DreamWorker:
         return normalized
     
     async def _render_candidate(self, candidate: DreamCandidate):
-        """Render candidate to full PNG (512x512 or higher)."""
-        image = None
-        image_data = None
-
-        # Try simple run_job API first (for compatibility with mock/simple models)
-        if hasattr(self.model, 'run_job'):
-            try:
-                class JobSpec:
-                    pass
-                spec = JobSpec()
-                spec.prompt = candidate.prompt
-                spec.seed = candidate.seed
-                spec.size = '512x512'
-                spec.steps = 4
-                spec.cfg = 1.0
-
-                result = self.model.run_job(spec)
-                if isinstance(result, tuple):
-                    png_bytes, _ = result
-                else:
-                    png_bytes = result
-
-                image_data = base64.b64encode(png_bytes).decode()
-                image = Image.open(io.BytesIO(png_bytes))
-            except Exception:
-                pass
-
-        # Fall back to full generation API
-        if image is None and hasattr(self.model, 'generate'):
-            try:
-                generator = torch.manual_seed(candidate.seed)
-
-                with torch.no_grad():
-                    result = self.model.generate(
-                        prompt=candidate.prompt,
-                        height=512,
-                        width=512,
-                        num_inference_steps=4,
-                        guidance_scale=1.0,
-                        generator=generator,
-                    )
-                    # Handle both .images[0] and direct image return
-                    if hasattr(result, 'images'):
-                        image = result.images[0]
-                    else:
-                        image = result
-
-                # Convert to base64 PNG
-                buffer = io.BytesIO()
-                image.save(buffer, format='PNG')
-                image_data = base64.b64encode(buffer.getvalue()).decode()
-            except Exception:
-                pass
-
-        if image_data:
+        """Render candidate to full PNG (512x512 or higher) using your worker."""
+        from dataclasses import dataclass
+        from concurrent.futures import Future
+        import io
+        
+        # Create request for full-size generation
+        class FullGenRequest:
+            def __init__(self):
+                self.prompt = candidate.prompt
+                self.size = "512x512"
+                self.num_inference_steps = 4
+                self.guidance_scale = 1.0
+                self.seed = candidate.seed
+                self.superres = False
+                self.superres_format = "png"
+                self.superres_quality = 92
+                self.superres_magnitude = 1
+        
+        req = FullGenRequest()
+        
+        @dataclass
+        class FullJob:
+            req: any
+            fut: Future
+            submitted_at: float
+        
+        fut = Future()
+        job = FullJob(req=req, fut=fut, submitted_at=time.time())
+        
+        try:
+            # Generate full-size through your worker
+            png_bytes, seed_used = self.model.run_job(job)
+            
+            # Convert to base64
+            import base64
+            image_data = base64.b64encode(png_bytes).decode()
+            
             candidate.rendered = True
             candidate.image_data = image_data
             candidate.metadata['rendered_size'] = '512x512'
+            
+            # Cache
             self.rendered_cache[candidate.seed] = image_data
+            
+        except Exception as e:
+            print(f"Dream render failed for seed {candidate.seed}: {e}")
+            candidate.rendered = False
     
     async def _store_candidate(self, candidate: DreamCandidate):
         """Store candidate in Redis."""
-        key = f"dream:{int(self.start_time)}:{candidate.seed}"
+        key = f"dream:{int(self.start_time or 0)}:{candidate.seed}"
         
         await self.redis.hset(key, mapping={
             'seed': candidate.seed,
@@ -449,7 +429,7 @@ class DreamWorker:
         
         # Add to sorted set for top-K queries
         await self.redis.zadd(
-            f"dream_scores:{int(self.start_time)}",
+            f"dream_scores:{int(self.start_time or 0)}",
             {key: candidate.score}
         )
     
@@ -480,17 +460,12 @@ class DreamWorker:
         
         return variations
     
-    def _hash_latent(self, latent) -> str:
+    def _hash_latent(self, latent: torch.Tensor) -> str:
         """Hash latent tensor for deduplication."""
         import hashlib
         
-        # Handle both torch tensors and numpy arrays
-        if isinstance(latent, torch.Tensor):
-            latent_bytes = latent.cpu().numpy().tobytes()
-        else:  # numpy array (from PIL Image)
-            latent_bytes = latent.tobytes()
-    
-        return hashlib.md5(latent_bytes).hexdigest()    
+        latent_bytes = latent.tobytes() if isinstance(latent, np.ndarray) else latent.cpu().numpy().tobytes()        
+        return hashlib.md5(latent_bytes).hexdigest()
     
     def _next_exploration_seed(self) -> int:
         """Get next seed based on exploration strategy."""
@@ -559,10 +534,7 @@ class DreamWorker:
     
     async def get_top_dreams(self, limit: int = 50, min_score: float = 0.0):
         """Get top N dreams by score."""
-        if self.start_time is None:
-            return {"error": "No active dream session"}
-
-        session_key = f"dream_scores:{int(self.start_time)}"
+        session_key = f"dream_scores:{int(self.start_time or 0)}"
         
         # Get top from Redis
         top_keys = await self.redis.zrevrange(
@@ -586,5 +558,59 @@ class DreamWorker:
                 'rendered': bool(int(data[b'rendered'])),
                 'image_data': data[b'image_data'].decode() if data[b'rendered'] else None,
             })
+
+# Global dream worker instance (for easy access across the app)
+_global_dream_worker = None
+
+
+def init_dream_worker(dream_worker):
+    """
+    Initialize the global dream worker instance.
+    
+    This allows you to access the dream worker from anywhere:
+    
+    from yume.dream_worker import get_dream_worker
+    
+    worker = get_dream_worker()
+    if worker:
+        worker.start_session(...)
+    
+    Args:
+        dream_worker: DreamWorker instance
         
-        return results
+    Returns:
+        The dream worker instance
+    """
+    global _global_dream_worker
+    _global_dream_worker = dream_worker
+    print(f"✅ Global dream worker initialized: {dream_worker}")
+    return dream_worker
+
+
+def get_dream_worker():
+    """
+    Get the global dream worker instance.
+    
+    Returns:
+        DreamWorker instance if initialized, None otherwise
+    """
+    return _global_dream_worker
+
+
+def clear_dream_worker():
+    """
+    Clear the global dream worker instance.
+    Useful for cleanup or testing.
+    """
+    global _global_dream_worker
+    _global_dream_worker = None
+
+
+# If you prefer NOT to use a global singleton pattern, you can skip
+# these functions entirely and just pass the dream_worker instance
+# around via function parameters or FastAPI dependency injection:
+#
+# @app.get("/dreams/status")
+# async def get_status(request: Request):
+#     dream_worker = request.app.state.dream_worker
+#     return dream_worker.get_status()

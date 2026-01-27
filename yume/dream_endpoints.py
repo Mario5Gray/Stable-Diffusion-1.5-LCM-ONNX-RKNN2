@@ -9,25 +9,23 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
+# Import the global worker management from dream_worker.py
+from yume.dream_worker import get_dream_worker
+
 # Initialize router
 dream_router = APIRouter(prefix="/dreams", tags=["dreams"])
 
-# Global dream worker instance (set via init_dream_worker)
-_dream_worker: Optional['DreamWorker'] = None
 
-
-def init_dream_worker(worker):
-    """Initialize the global dream worker instance."""
-    global _dream_worker
-    _dream_worker = worker
+# Helper that raises proper HTTP exception
+def _get_worker_or_error():
+    """Get dream worker or raise HTTP 500."""
+    worker = get_dream_worker()  # From dream_worker.py
+    if worker is None:
+        raise HTTPException(
+            status_code=500, 
+            detail="Dream worker not initialized. Check server startup logs."
+        )
     return worker
-
-
-def get_dream_worker():
-    """Get the global dream worker instance."""
-    if _dream_worker is None:
-        raise HTTPException(500, "Dream worker not initialized. Call init_dream_worker() first.")
-    return _dream_worker
 
 
 class DreamStartRequest(BaseModel):
@@ -38,7 +36,7 @@ class DreamStartRequest(BaseModel):
     similarity_threshold: float = Field(0.7, ge=0.0, le=1.0, description="Min score to keep")
     render_interval: int = Field(100, ge=1, description="Render every N high-scoring dreams")
     top_k: int = Field(100, ge=10, le=1000, description="Keep top K candidates")
-    
+    strategy: str = Field("random", description="Exploration strategy")
 
 
 class DreamStatus(BaseModel):
@@ -75,7 +73,7 @@ async def start_dream_session(request: DreamStartRequest):
     
     Returns immediately - session runs in background.
     """
-    worker = get_dream_worker()
+    worker = _get_worker_or_error()
     
     result = await worker.start_dreaming(
         base_prompt=request.prompt,
@@ -83,6 +81,7 @@ async def start_dream_session(request: DreamStartRequest):
         temperature=request.temperature,
         similarity_threshold=request.similarity_threshold,
         render_interval=request.render_interval,
+        exploration_strategy=request.strategy,
     )
     
     if "error" in result:
@@ -94,7 +93,7 @@ async def start_dream_session(request: DreamStartRequest):
 @dream_router.post("/stop")
 async def stop_dream_session():
     """Stop the current dream session."""
-    worker = get_dream_worker()
+    worker = _get_worker_or_error()
     result = worker.stop_dreaming()
     return result
 
@@ -102,7 +101,7 @@ async def stop_dream_session():
 @dream_router.get("/status", response_model=DreamStatus)
 async def get_dream_status():
     """Get current dream session status."""
-    worker = get_dream_worker()
+    worker = _get_worker_or_error()
     status = worker.get_status()
     return status
 
@@ -124,10 +123,12 @@ async def get_top_dreams(
     Returns:
         List of dream candidates sorted by score (descending)
     """
-    worker = get_dream_worker()
+    worker = _get_worker_or_error()
     results = await worker.get_top_dreams(limit, min_score)
+    if results is None:
+        results = []
     
-    if rendered_only:
+    if rendered_only and results:
         results = [r for r in results if r['rendered']]
     
     return results
@@ -139,7 +140,7 @@ async def get_recent_dreams(limit: int = 20):
     Get most recent dreams (by timestamp).
     Useful for watching the dream session in real-time.
     """
-    worker = get_dream_worker()
+    worker = _get_worker_or_error()
     results = await worker.get_top_dreams(limit=1000, min_score=0.0)
     
     # Sort by timestamp desc
@@ -153,7 +154,7 @@ async def get_dream_stats():
     """
     Get aggregate statistics about dream sessions.
     """
-    worker = get_dream_worker()
+    worker = _get_worker_or_error()
     status = worker.get_status()
     
     # Calculate additional stats
@@ -174,30 +175,39 @@ async def get_dream_stats():
 """
 # In your lcm_sr_server.py:
 
-from yume import DreamWorker, dream_router, init_dream_worker
-from yume.scoring import CLIPScorer, CompositeScorer
+from yume.dream_worker import DreamWorker, init_dream_worker
+from yume.dream_endpoints import dream_router
+from yume.scoring import CLIPScorer
 import redis.asyncio as redis
 
-# Initialize Redis
-redis_client = await redis.from_url("redis://localhost:6379")
-
-# Initialize CLIP scorer
-from transformers import CLIPProcessor, CLIPModel
-clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-clip_scorer = CLIPScorer(clip_model)
-
-# Initialize dream worker
-dream_worker = DreamWorker(
-    model=your_lcm_pipeline,
-    scorer=clip_scorer,
-    redis_client=redis_client,
-    config={'top_k': 100}
-)
-
-# Register with endpoints
-init_dream_worker(dream_worker)
+# During startup:
+@app.on_event("startup")
+async def startup():
+    # Initialize Redis
+    redis_client = await redis.from_url("redis://localhost:6379")
+    
+    # Initialize CLIP scorer
+    from transformers import CLIPProcessor, CLIPModel
+    clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+    clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    clip_scorer = CLIPScorer(clip_model, clip_processor, device="cuda")
+    
+    # Initialize dream worker
+    dream_worker = DreamWorker(
+        model=app.state.service.workers[0],  # Your LCM worker
+        redis_client=redis_client,
+        clip_scorer=clip_scorer,
+        config={'top_k': 100}
+    )
+    
+    # Register with global singleton in dream_worker.py
+    init_dream_worker(dream_worker)
+    
+    # Also store in app state for consistency
+    app.state.dream_worker = dream_worker
 
 # Add router to app
 app.include_router(dream_router)
+
+# Now all endpoints use the SAME global worker instance from dream_worker.py!
 """

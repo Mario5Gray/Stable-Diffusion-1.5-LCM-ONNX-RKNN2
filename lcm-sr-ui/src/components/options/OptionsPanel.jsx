@@ -50,6 +50,7 @@ import { ComfyOptions } from "./ComfyOptions";
  */
 export function OptionsPanel({
   params,
+  inputImage,
   selectedParams,
   selectedMsgId,
   onClearSelection,
@@ -521,7 +522,7 @@ export function OptionsPanel({
           
           <Separator />
 
-          <ComfyOptions  />
+          <ComfyOptions inputImage={inputImage} />
           
           <Separator />
 

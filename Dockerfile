@@ -77,6 +77,7 @@ COPY invokers/ /app/invokers/
 RUN chmod +x /app/start.sh
 
 # Copy built UI into where FastAPI will serve it
+RUN mkdir -p /app/logs
 RUN mkdir -p /opt/lcm-sr-server/ui-dist
 COPY --from=ui-build /ui/dist/ /opt/lcm-sr-server/ui-dist/
 

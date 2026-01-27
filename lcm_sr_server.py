@@ -58,6 +58,7 @@ from transformers import CLIPTokenizer
 from PIL import Image
 
 from server.comfy_routes import router as comfy_router
+from yume.dream_endpoints import dream_router
 
 # lcm_sr_server.py (add near imports)
 from compat_endpoints import CompatEndpoints
@@ -67,8 +68,18 @@ from storage_provider import StorageProvider, InMemoryStorageProvider
 
 from backends.base import ModelPaths, Job
 BACKEND = os.environ.get("BACKEND", "auto").lower().strip()  # auto|rknn|cuda
+COMFYUI_ENABLED = os.environ.get("COMFYUI_ENABLED", "false").lower().strip()
+YUME_ENABLED = os.environ.get("YUME_ENABLED", "false").lower().strip()
+
+from yume.dream_init import initialize_dream_system, shutdown_dream_system
+
+import logging
+
+logger = logging.getLogger(__name__)
+#logging.basicConfig(filename='myapp.log', level=logging.INFO)
 
 # Backend Worker Wrapper
+
         
 # -----------------------------
 # Request schema (HTTP)
@@ -267,6 +278,9 @@ class SRJob:
 
 class SuperResWorker:
     def __init__(self, worker_id: int, model_path: str, input_size: int, output_size: int):
+        if not RKNNLITE_AVAILABLE:
+            raise RuntimeError("RKNNLite not available for SR - install rknnlite package")
+
         self.worker_id = worker_id
         self.model_path = model_path
         self.input_size = int(input_size)
@@ -500,6 +514,9 @@ async def lifespan(app: FastAPI):
 
     app.state.storage = StorageProvider.make_storage_provider_from_env()
 
+    if YUME_ENABLED:
+        await startup_yume()
+
     yield
 
     # shutdown
@@ -512,6 +529,11 @@ async def lifespan(app: FastAPI):
     if app.state.sr_service is not None:
         app.state.sr_service.shutdown()
 
+    if YUME_ENABLED:
+        try:
+            shutdown_dream_system        
+        except Exception:
+            pass
 
 app = FastAPI(lifespan=lifespan, title="LCM_Stable_Diffusion and Super_Resolution Service")
 
@@ -826,10 +848,26 @@ def storage_get(key: str):
 def health():
     return {"status": "ok"}
 
+async def startup_yume():
+    logger.info("🌙 Initializing Yume")
+    success = await initialize_dream_system(
+        app_state=app.state,
+        service=app.state.service,
+        backend=BACKEND,
+        dream_config={'top_k': 200, 'explore_temperature': 0.8}
+    )
+    if success:
+        logger.info("🌕Yume system ready!")
+
+# OpenAI compatible endpoint
 CompatEndpoints(app=app, run_generate=_run_generate_from_dict).mount()
 
+if YUME_ENABLED:
+    app.include_router(dream_router)
+
 # Comfyui invoker
-app.include_router(comfy_router)
+if COMFYUI_ENABLED:
+    app.include_router(comfy_router)
 
 # UI static mount (serves Vite dist)
 app.mount(
@@ -840,7 +878,7 @@ app.mount(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://node2:4205", "https://node2.lan:4205","http://enigma:5173", "http://enigma.lan:4200", "https://enigma4201", "http://enigma:4200", "https://node2:4201"],
+    allow_origins=["http://enigma:5173", "https://node2.lan:4205","https://node2:4201"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

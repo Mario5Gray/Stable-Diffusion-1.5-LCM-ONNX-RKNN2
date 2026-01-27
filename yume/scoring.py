@@ -56,7 +56,11 @@ class CLIPScorer:
                 text_tokens = clip.tokenize([text]).to(self.device)
                 text_features = self.model.encode_text(text_tokens)
 
-            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+            if hasattr(text_features, 'shape'):
+                text_features = text_features / torch.norm(text_features, dim=-1, keepdim=True)
+            else:
+                text_features = text_features.pooler_output / torch.norm(text_features.pooler_output, dim=-1, keepdim=True)
+
 
         self.text_cache[text] = text_features
         return text_features
@@ -83,7 +87,10 @@ class CLIPScorer:
 
                 image_features = self.model.encode_image(image_tensor)
 
-            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+            if hasattr(image_features, 'shape'):
+                image_features = image_features / torch.norm(image_features, dim=-1, keepdim=True)
+            else:
+                image_features = image_features.pooler_output / torch.norm(image_features.pooler_output, dim=-1, keepdim=True)
 
         return image_features
 
