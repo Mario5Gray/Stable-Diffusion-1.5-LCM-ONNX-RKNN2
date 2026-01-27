@@ -1,3 +1,4 @@
+// vite.config.js
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
@@ -10,11 +11,13 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: ["enigma", "node2", "http://enigma:4200","enigma:4200", "enigma:5173"],
+    allowedHosts: process.env.VITE_ALLOWED_HOSTS 
+      ? process.env.VITE_ALLOWED_HOSTS.split(',')
+      : ["mindgate", "enigma", "node2"],
     host: true,
     watch: {
       usePolling: true,
-      interval: 300, // 100–300 is typical
+      interval: 300,
     },    
     proxy: {
       "/generate": "http://localhost:4200",
