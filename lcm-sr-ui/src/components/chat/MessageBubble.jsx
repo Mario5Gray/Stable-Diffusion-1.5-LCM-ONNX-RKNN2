@@ -141,16 +141,16 @@ export function MessageBubble({
 
   // Different wrapper styles for image-only vs text messages
   const wrapperClass = isImageOnly
-    ? 'max-w-[92%] transition-all ' + clickable
+    ? 'max-w-[100%] transition-all' + clickable
     : 'max-w-[92%] rounded-2xl px-4 py-3 shadow-sm transition-all ' + bubbleColor + ' ' + selectedRing + ' ' + clickable;
 
   return (
       <div
     className={`
-      flex items-start gap-3 max-w-[100%]
+      flex items-start gap-0 max-w-[100%]
       rounded-2xl items-center justify-center 
-      px-2 py-2
-      ${isSelected ? "bg-pink-100 dark:bg-white/9" : ""}
+      px-2 py-0
+      ${isSelected ? "bg-zinc-600 dark:bg-white/9" : ""}
       transition-colors
     `}
   >

@@ -281,6 +281,45 @@ export function useChatMessages() {
   }, []);
 
   /**
+   *  Handle keyboard input for 'delete', and 'undo'
+   **/
+  function isTypingTarget(el) {
+    if (!el) return false;
+    const tag = el.tagName?.toLowerCase();
+    return (
+      tag === "input" ||
+      tag === "textarea" ||
+      tag === "select" ||
+      el.isContentEditable
+    );
+  }
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return; // avoid shortcuts
+      if (isTypingTarget(e.target)) return;
+
+      if (!selectedMsgId) return;
+
+      e.preventDefault();
+
+      // implement this however your chat state stores messages
+      // Option A: you already have a helper:
+      //deleteMessage(selectedMsgId);
+
+      // Option B: filter it out:
+      setMessages((prev) => prev.filter((m) => m.id !== selectedMsgId));
+
+      clearSelection?.(); // or setSelectedMsgId(null)
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedMsgId, clearSelection /*, deleteMessage, setMessages */]);
+
+
+  /**
    * Reload images from cache for messages marked with needsReload.
    * Call this on app init with the cache instance.
    * @param {object} cache - Cache with get() method

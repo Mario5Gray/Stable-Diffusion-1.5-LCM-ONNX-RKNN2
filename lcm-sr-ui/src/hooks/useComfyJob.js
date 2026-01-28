@@ -37,7 +37,7 @@ export function useComfyJob({ api, pollMs = 750, autoPoll = true } = {}) {
     async (payload) => {
       // cancel any in-flight run
       await cancel();
-
+      
       setState("starting");
       setError(null);
       setJob(null);
@@ -67,7 +67,7 @@ export function useComfyJob({ api, pollMs = 750, autoPoll = true } = {}) {
     [api, cancel]
   );
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async () => {console.log("Starting");
     if (!jobId || !api) return;
     const ac = abortRef.current ?? new AbortController();
     abortRef.current = ac;

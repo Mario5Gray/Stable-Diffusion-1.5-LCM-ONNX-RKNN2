@@ -1,6 +1,6 @@
 // src/App.jsx
 
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useMemo, useState, useCallback, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { useLatentExploration } from './hooks/useLatentExploration';
 import { useChatMessages } from './hooks/useChatMessages';
@@ -213,6 +213,46 @@ export default function App() {
   }, [selectedMsg]);
 
   /**
+   *  Handling comfyui image to chat message 
+   */
+  const pendingIdRef = useRef(null);
+
+  const onComfyStart = useCallback(() => {
+    const id = crypto.randomUUID();
+    pendingIdRef.current = id;
+    console.log("comfy message");
+    addMessage({
+      id,
+      role: "assistant",
+      kind: "pending",
+      meta: { backend: "comfy" },
+    });
+  }, [addMessage]);
+
+  /*
+    Handle ComfyUI image->chat
+  */
+  const onComfyOutputs = useCallback(({ workflowId, params, outputs }) => {
+    // if you only care about first output:
+    const first = outputs?.[0];
+    if (!first) return;
+
+    const id = pendingIdRef.current;
+    if (id) {
+      updateMessage(id, {
+        kind: "image",
+        imageUrl: first.url,
+        params: { ...params, workflowId },
+        meta: { backend: `comfy:${workflowId}` },
+      });
+      pendingIdRef.current = null;
+    } else {
+      // fallback if no pending
+      addMessage({ role:"assistant", kind:"image", imageUrl:first.url, params:{...params, workflowId}, meta:{backend:`comfy:${workflowId}`}});
+    }
+  }, [addMessage, updateMessage]);
+
+  /**
    * Handle super-resolution upload.
    */
   const onSuperResUpload = useCallback(() => {
@@ -353,6 +393,8 @@ const inputImage = useMemo(() => {
             onClearCache={clearCache}
             getCacheStats={getCacheStats}
             onClearHistory={clearHistory}
+            onComfyOutputs={onComfyOutputs}
+            onComfyStart={onComfyStart}
 
           />
         </div>

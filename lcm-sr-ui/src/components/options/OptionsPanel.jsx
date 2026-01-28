@@ -73,6 +73,8 @@ export function OptionsPanel({
   onClearCache,
   getCacheStats,
   onClearHistory,
+  onComfyOutputs,
+  onComfyStart,
 }) {
   const optionsScrollRef = useRef(null);
   const [canScrollDown, setCanScrollDown] = useState(false);
@@ -481,7 +483,10 @@ export function OptionsPanel({
           
           <Separator />
 
-          <ComfyOptions inputImage={inputImage} />
+          <ComfyOptions   onOutputs={onComfyOutputs}
+                          inputImage={inputImage} 
+                          onComfyStart={onComfyStart}
+          />
           
           <Separator />
 

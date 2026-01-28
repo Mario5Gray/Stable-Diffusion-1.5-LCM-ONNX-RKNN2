@@ -22,6 +22,7 @@ export function ComfyOptions({
   onStart,
   onDone,
   onError,
+  onOutputs,
 }) {
 
   const api = useMemo(() => createComfyInvokerApi(apiBase), [apiBase]);
@@ -34,9 +35,6 @@ export function ComfyOptions({
 
   const run = useCallback(async () => {
     onStart?.();
-
-    console.log("Lets getComfy!! inputImage=", inputImage);
-console.log("kind=", inputImage?.kind, "key=", inputImage?.key, "url=", inputImage?.url);
 
     let inputImageFile = null;    
 
@@ -58,9 +56,14 @@ console.log("kind=", inputImage?.kind, "key=", inputImage?.key, "url=", inputIma
       workflowId,
       params: { cfg, steps, denoise },
       inputImageFile,
-    });
+    });    
   }, [onStart, comfy, workflowId, cfg, steps, denoise, inputImage, file]);
-
+  
+  useEffect(() => {
+    console.log("ComfyOptions mounted");
+    return () => console.log("ComfyOptions unmounted");
+  }, []);
+  
   // If you want a "done" callback when outputs arrive:
   // (cheap + safe: just watch comfy.state)
   React.useEffect(() => {
@@ -68,6 +71,17 @@ console.log("kind=", inputImage?.kind, "key=", inputImage?.key, "url=", inputIma
       onDone?.(comfy.job);
     }
   }, [comfy.state, comfy.job, onDone]);
+
+  useEffect(() => {
+    if (comfy.state === "done" && comfy.job?.outputs?.length) {
+      onOutputs?.({
+        workflowId,
+        params: { cfg, steps, denoise },
+        outputs: comfy.job.outputs, // [{url, filename, ...}]
+        job: comfy.job,
+      });
+    }
+  }, [comfy.state, comfy.job, onOutputs]);
 
   const lastKeyRef = useRef(null);
 
@@ -91,8 +105,18 @@ console.log("kind=", inputImage?.kind, "key=", inputImage?.key, "url=", inputIma
       }
 
       if (inputImage.kind === "url") {
-        const f = await urlToFile(inputImage.url, inputImage.filename || "input.png");
-        if (!cancelled) setFile(f);
+        try {
+          const f = await urlToFile(
+            inputImage.url,
+            inputImage.filename || "input.png"
+          );
+          if (!cancelled) setFile(f);
+        } catch (err) {
+          if (!cancelled) {
+            console.error("Failed to load input image:", err);
+            setFile(null); // important: clear stale file
+          }
+        }
       }
     }
 
