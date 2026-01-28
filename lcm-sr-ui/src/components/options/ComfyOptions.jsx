@@ -100,25 +100,43 @@ console.log("kind=", inputImage?.kind, "key=", inputImage?.key, "url=", inputIma
     return () => { cancelled = true; };
   }, [inputImage]);
 
-  console.log("[OptionsPanel] inputImage=", inputImage);
   return (
-    <div className="space-y-3 rounded-2xl border p-4 bg-gradient-to-br from-purple-50/50 to-pink-50/50 dark:from-purple-950/20 dark:to-pink-950/20">
-      <Label className="text-base font-semibold">Send to ComfyUI Workflow</Label>
+    <div className="option-panel-area space-y-3 rounded-2xl border p-4">
+      <Label className="text-base  items-centerfont-semibold">ComfyUI Workflow</Label>
       <div className="flex items-center gap-2">
         <Badge variant={comfy.state === "running" ? "default" : "secondary"}>
           {comfy.state}
         </Badge>
       </div>
 
-      <div className="space-y-1">
-      <label>CFG</label>
-        <input
-          type="number"
-          value={cfg}
-          step="0.05"
-          onChange={(e) => setCfg(parseFloat(e.target.value))}
-        />
+      <div className="flex flex-col grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-2">
+        <label className="text-xs text-black-300">CFG</label>
+
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setCfg(v => Math.max(0, +(v - 0.01).toFixed(2)))}
+            className="px-2 py-1 rounded bg-indigo-700 hover:bg-zinc-600 text-white"
+          >
+            –
+          </button>
+
+          <input
+            type="number"
+            step="0.01"
+            value={cfg}
+            onChange={e => setCfg(parseFloat(e.target.value))}
+            className="w-24 text-center px-2 py-1.5 rounded bg-violet-300 border border-zinc-700 text-black  text-sm font-mono"
+          />
+
+          <button
+            onClick={() => setCfg(v => +(v + 0.01).toFixed(2))}
+            className="px-2 py-1 rounded bg-indigo-700 hover:bg-zinc-600 text-white"
+          >
+            +
+          </button>
+        </div>
       </div>
+
 
       <div className="space-y-1">
       <label>Steps</label>
@@ -135,7 +153,7 @@ console.log("kind=", inputImage?.kind, "key=", inputImage?.key, "url=", inputIma
         <input
           type="number"
           value={denoise}
-          step="0.05"
+          step="0.01"
           onChange={(e) => setDenoise(parseFloat(e.target.value))}
         />
       </label>

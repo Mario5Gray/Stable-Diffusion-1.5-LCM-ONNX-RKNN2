@@ -262,7 +262,7 @@ const inputImage = useMemo(() => {
   // ============================================================================
 
   return (
-<div className="h-screen overflow-hidden bg-background text-foreground">
+<div className="h-screen overflow-hidden bg-indigo-200 bg-background text-foreground">
   <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
     {/* Tab Navigation */}
     <div className="border-b px-4">

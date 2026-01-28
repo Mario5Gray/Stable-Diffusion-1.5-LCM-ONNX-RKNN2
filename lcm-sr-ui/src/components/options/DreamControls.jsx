@@ -54,7 +54,7 @@ export function DreamControls({
   const intervalSeconds = Math.round(dreamInterval / 1000);
 
   return (
-    <div className="space-y-3 rounded-2xl border p-4 bg-gradient-to-br from-purple-50/50 to-pink-50/50 dark:from-purple-950/20 dark:to-pink-950/20">
+    <div className="option-panel-area space-y-3 rounded-2xl border p-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">

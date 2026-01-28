@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
+.send-btn {
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.send-btn:active {
+  filter: hue-rotate(25deg) brightness(1.1);
+  transform: scale(0.97);
+}
+
+.option-panel-area:hover {
+  @apply bg-gradient-to-br from-purple-100/100 to-violet-100/100 dark:from-purple-950/20 dark:to-pink-950/20;
+}
+
+.option-panel-area {
+  @apply bg-gradient-to-br from-purple-100/100 to-violet-100/100 dark:from-purple-950/20 dark:to-pink-950/20;
+}
+
 /* react-scroll-to-bottom button styling */
 .scroll-to-bottom-button {
   position: absolute;

@@ -101,7 +101,7 @@ export const PROMPT_DELTAS = [
  * UI MESSAGES & LABELS
  * ========================================================================== */
 export const UI_MESSAGES = {
-  INITIAL_SYSTEM: "Ready. Type a prompt and hit Send to generate a PNG. Toggle SR if your server supports it.",
+  INITIAL_SYSTEM: "Type a prompt and hit Send to generate a PNG.",
   GENERATING: "Generating…",
   REGENERATING: "Regenerating…",
   SUPER_RESOLVING: "Super-resolving…",
@@ -109,7 +109,7 @@ export const UI_MESSAGES = {
   COPY_PROMPT_TIP: "Copy current prompt to clipboard",
   COPIED: "Copied!",
   COPY_PROMPT: "Copy prompt",
-  KEYBOARD_TIP: "Tip: press Ctrl/⌘ + Enter to send.",
+  KEYBOARD_TIP: "Tip: press Ctral/⌘ + Enter to send.",
   SELECT_IMAGE_TIP: "Tip: click an image to select it. Sliders will edit that image's settings.",
   CLICK_TO_SELECT: "Click to select",
   CLICK_TO_LOAD_SETTINGS: "Click to load these settings",
@@ -205,7 +205,7 @@ export const BADGE_LABELS = {
 /* ============================================================================
  * DEFAULT PROMPTS
  * ========================================================================== */
-export const DEFAULT_PROMPT = "a cinematic photograph of a futuristic city at sunset";
+export const DEFAULT_PROMPT = "";
 
 /* ============================================================================
  * ERROR MESSAGES

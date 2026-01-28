@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Send, Trash2 } from 'lucide-react';
+import { Send, Trash2, Combine} from 'lucide-react';
 import { DreamControls } from './DreamControls';
 import { SelectedImageControls } from './SelectedImageControls';
 import {
@@ -229,13 +229,6 @@ export function OptionsPanel({
 
   return (
     <Card className="rounded-2xl shadow-sm h-full flex flex-col overflow-hidden">
-      <CardHeader className="border-b">
-        <CardTitle className="text-lg">Options</CardTitle>
-        <div className="text-sm text-muted-foreground">
-          Generation parameters
-        </div>
-      </CardHeader>
-
       {/* Scroll container with hint overlay */}
       <div className="relative flex-1 min-h-0">
         {(canScrollDown || canScrollUp) && (
@@ -268,8 +261,8 @@ export function OptionsPanel({
           
           <Separator />
 
-          {/* Prompt */}
-          <div className="space-y-3 rounded-2xl border p-4 bg-gradient-to-br from-purple-50/50 to-pink-50/50 dark:from-purple-950/20 dark:to-pink-950/20">
+          {/* Prompt, steps, cfg, seed, resolution */}
+          <div className="space-y-3 rounded-2xl border p-4 option-panel-area">
           <div className="space-y-1">
             <Label>
               {selectedParams ? 'Selected image prompt' : 'Draft prompt'}
@@ -285,8 +278,8 @@ export function OptionsPanel({
           {/* Steps - Segmented Control */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Steps</Label>
-              <span className="text-sm text-muted-foreground tabular-nums">{localSteps}</span>
+              <Combine className="mr-2 h-4 w-4" /><Label className="text-xs">Steps</Label>
+              <span className="text-xs text-muted-foreground tabular-nums">{localSteps}</span>
             </div>
             <div
               className="relative flex rounded-xl p-0.5 overflow-hidden"
@@ -316,8 +309,8 @@ export function OptionsPanel({
           {/* CFG - Segmented Control */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>CFG (Guidance)</Label>
-              <span className="text-sm text-muted-foreground tabular-nums">{localCfg.toFixed(1)}</span>
+              <Label className="text-xs">CFG (Guidance)</Label>
+              <span className="text-xs text-muted-foreground tabular-nums">{localCfg.toFixed(1)}</span>
             </div>
             <div
               className="relative flex rounded-xl p-0.5 overflow-hidden"
@@ -360,9 +353,6 @@ export function OptionsPanel({
                   {v % 2 === 0 ? `.${v}` : '|'}
                 </button>
               ))}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Top: whole number. Bottom: fine-tune (+0.0 to +0.9).
             </div>
             {selectedParams && (
               <div className="space-y-2 mt-3">
@@ -408,14 +398,34 @@ export function OptionsPanel({
                   {seedSign > 0 ? 'Add to' : 'Subtract from'} current seed and regenerate.
                 </div>
               </div>
-            )}            
+            )}
+                    {/* Size */}
+          <div className="space-y-1">
+            <Label>Size</Label>
+            <Select value={params.effective.size} onValueChange={params.setSize}>
+              <SelectTrigger className={CSS_CLASSES.SELECT_TRIGGER}>
+                <SelectValue placeholder="Select size" />
+              </SelectTrigger>
+              <SelectContent className={CSS_CLASSES.SELECT_CONTENT}>
+                {SIZE_OPTIONS.map((s) => (
+                  <SelectItem
+                    key={s}
+                    className={CSS_CLASSES.SELECT_ITEM}
+                    value={s}
+                  >
+                    {formatSizeDisplay(s)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>            
           </div>
           </div>
           <Separator />
 
           {/* Seed */}
-          <div className="space-y-1">
-            <Label>Seed</Label>
+          <div className="space-y-3 rounded-2xl border p-4 option-panel-area">
+            <Label>Next Seed</Label>
             <div className="flex items-center gap-3">
               <div className="flex-1">
                 <Select
@@ -465,60 +475,9 @@ export function OptionsPanel({
 
             {/* Seed Modifier - only when image is selected */}
           </div>
-          {/* Size */}
-          <div className="space-y-1">
-            <Label>Size</Label>
-            <Select value={params.effective.size} onValueChange={params.setSize}>
-              <SelectTrigger className={CSS_CLASSES.SELECT_TRIGGER}>
-                <SelectValue placeholder="Select size" />
-              </SelectTrigger>
-              <SelectContent className={CSS_CLASSES.SELECT_CONTENT}>
-                {SIZE_OPTIONS.map((s) => (
-                  <SelectItem
-                    key={s}
-                    className={CSS_CLASSES.SELECT_ITEM}
-                    value={s}
-                  >
-                    {formatSizeDisplay(s)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
 
           {/* Super-Resolution - Segmented Control */}
-          <div className="space-y-1">
-            <Label className="text-base font-semibold">Super-Resolution</Label>
-            <div
-              className="relative flex rounded-xl p-0.5 overflow-hidden"
-              style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%)' }}
-            >
-              {[
-                { v: 0, label: 'Off' },
-                { v: 1, label: '1×' },
-                { v: 2, label: '2×' },
-                { v: 3, label: '3×' },
-                { v: 4, label: '4×' },
-              ].map(({ v, label }) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => handleSrLevelChange(v)}
-                  className={
-                    'flex-1 py-1.5 text-xs font-medium rounded-lg transition-all ' +
-                    (localSrLevel === v
-                      ? 'bg-white text-purple-700 shadow-sm'
-                      : 'text-white/90 hover:bg-white/20')
-                  }
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Number of upscale passes. Higher = more detail, slower.
-            </div>
-          </div>
+
           
           <Separator />
 
@@ -526,25 +485,8 @@ export function OptionsPanel({
           
           <Separator />
 
-          {/* Selected Image Controls */}
-          {selectedParams ? (
-            <SelectedImageControls
-              selectedParams={selectedParams}
-              onClear={onClearSelection}
-              onApplyDelta={onApplyPromptDelta}
-              onRerun={onRerunSelected}
-            />
-          ) : (
-            <div className="text-xs text-muted-foreground rounded-lg bg-muted/50 p-3">
-              💡 Tip: Click an image to select it. Sliders will edit that image's
-              settings and regenerate live.
-            </div>
-          )}
-
-          <Separator />
-
           {/* Super-Resolution Upload */}
-          <div className="space-y-3">
+          <div className="space-y-3 rounded-2xl border p-4 option-panel-area">
             <div className="font-medium">Super-resolve an uploaded image</div>
 
             {/* Magnitude */}
@@ -601,7 +543,7 @@ export function OptionsPanel({
           <Separator />
 
           {/* Cache Management */}
-          <div className="space-y-3">
+          <div className="space-y-3 rounded-2xl border p-4 option-panel-area">
             <div className="font-medium">Image Cache</div>
             {cacheStats && (
               <div className="rounded-2xl bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">

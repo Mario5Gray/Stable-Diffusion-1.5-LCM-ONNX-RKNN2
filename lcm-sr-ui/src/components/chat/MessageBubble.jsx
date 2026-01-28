@@ -150,7 +150,7 @@ export function MessageBubble({
       flex items-start gap-3 max-w-[100%]
       rounded-2xl items-center justify-center 
       px-2 py-2
-      ${isSelected ? "bg-black/9 dark:bg-white/3" : ""}
+      ${isSelected ? "bg-pink-100 dark:bg-white/9" : ""}
       transition-colors
     `}
   >
@@ -194,7 +194,7 @@ export function MessageBubble({
                   src={msg.imageUrl}
                   alt="generation"
                   className={
-                    'max-h-[520px] w-auto rounded-xl bg-background' +
+                    'max-h-[640px] w-auto rounded-xl bg-background' +
                     (msg.isRegenerating ? ' opacity-60' : '') +
                     (isDreamMessage ? ' cursor-pointer' : '')
                   }
