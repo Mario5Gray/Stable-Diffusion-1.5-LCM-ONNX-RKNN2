@@ -5,7 +5,7 @@ export function createComfyInvokerApi(baseUrl) {
   return {
     async startJob({ workflowId, params, inputImageFile }, { signal } = {}) {
       // If you upload image to *your* backend: use multipart
-      const form = new FormData();
+      const form = new FormData();      
       form.append("workflowId", workflowId);
       form.append("params", JSON.stringify(params ?? {}));
       if (inputImageFile) form.append("image", inputImageFile);

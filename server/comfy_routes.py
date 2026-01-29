@@ -170,6 +170,16 @@ def _run_job(job_id: str, workflow_id: str, params: Dict[str, Any], uploaded_ima
             seed=params.get("seed"),
         )
 
+        print("make_prompt workflow=%s image=%s steps=%s cfg=%s denoise=%s seed=%s nodes=%d" %
+            ( workflow_id,
+            uploaded_name,
+            params.get("steps"),
+            params.get("cfg"),
+            params.get("denoise"),
+            params.get("seed"),
+            len(prompt_graph) )
+        )
+
         logger.debug(
             "make_prompt workflow=%s image=%s steps=%s cfg=%s denoise=%s seed=%s nodes=%d",
             workflow_id,

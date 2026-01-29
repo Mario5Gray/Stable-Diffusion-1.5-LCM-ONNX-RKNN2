@@ -35,7 +35,7 @@ LOGGING_CONFIG = {
         },
         "comfy.jobs": {
             "handlers": ["default"],
-            "level": LOG_LEVEL,
+            "level": "DEBUG",
             "propagate": False,
         },
 

@@ -16,8 +16,8 @@ export function ComfyOptions({
   inputImage,
   apiBase = "https://node2:4205",
   workflowId = "LCM_CYBERPONY_XL",
-  defaultCfg = 1.0,
-  defaultSteps = 16,
+  defaultCfg = 0.0,
+  defaultSteps = 8,
   defaultDenoise = 0.03,
   onStart,
   onDone,
@@ -80,7 +80,7 @@ export function ComfyOptions({
       onError?.(err);
       throw err;
     }
-
+    console.log( "cfg=" + cfg + ", steps=" + steps + ", denoise=" + denoise)
     return comfy.start({
       workflowId,
       params: { cfg, steps, denoise },
@@ -90,7 +90,7 @@ export function ComfyOptions({
 
   // Debug mount/unmount (kept, harmless)
   useEffect(() => {
-    console.log("ComfyOptions mounted");
+    console.log("ComfyOptions mounted");  
     return () => console.log("ComfyOptions unmounted");
   }, []);
 
@@ -125,7 +125,7 @@ export function ComfyOptions({
 
   useEffect(() => {
     let cancelled = false;
-
+    console.log( "cfg=" + cfg + ", steps=" + steps + ", denoise=" + denoise)
     async function sync() {
       const key = inputImage?.key ?? null;
 
@@ -160,7 +160,7 @@ export function ComfyOptions({
     return () => {
       cancelled = true;
     };
-  }, [inputImage]);
+  }, [inputImage, cfg, denoise, steps]);
 
   return (
     <div className="option-panel-area space-y-3 rounded-2xl border p-4">
