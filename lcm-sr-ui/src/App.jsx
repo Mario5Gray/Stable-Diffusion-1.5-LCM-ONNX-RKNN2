@@ -13,7 +13,7 @@ import { DreamGallery } from './components/dreams/DreamGallery';
 import { copyToClipboard } from './utils/helpers';
 import { SR_CONFIG } from './utils/constants';
 import { MessageSquare, Sparkles } from 'lucide-react';
-
+import { uuidv4 } from "@/utils/uuid";
 
 export default function App() {
   // ============================================================================
@@ -216,11 +216,12 @@ export default function App() {
    *  Handling comfyui image to chat message 
    */
   const pendingIdRef = useRef(null);
-
+  
+  
   const onComfyStart = useCallback(() => {
-    const id = crypto.randomUUID();
+    const id = uuidv4();
     pendingIdRef.current = id;
-    console.log("comfy message");
+
     addMessage({
       id,
       role: "assistant",

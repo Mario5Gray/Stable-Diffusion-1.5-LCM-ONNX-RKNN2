@@ -9,6 +9,12 @@ export function useComfyJob({ api, pollMs = 750, autoPoll = true } = {}) {
   const [state, setState] = useState("idle"); // idle|starting|running|done|error|canceled
   const [job, setJob] = useState(null);       // latest job payload
   const [error, setError] = useState(null);
+  const lastFingerprintRef = useRef(null);
+  const lastChangeAtRef = useRef(0);
+  const startedAtRef = useRef(0);
+
+  const hardTimeoutMs = 6 * 60 * 1000;   // e.g. 6 minutes
+  const staleTimeoutMs = 120 * 1000;      // e.g. 30s with no changes
 
   const clearPoll = useCallback(() => {
     if (pollTimerRef.current) {
@@ -44,15 +50,17 @@ export function useComfyJob({ api, pollMs = 750, autoPoll = true } = {}) {
       abortRef.current = ac;
 
       try {
-        const started = await api.startJob(payload, { signal: ac.signal });
+        const started = await api.startJob(payload, { signal: ac.signal });                
         const newJobId = started.jobId ?? started.job_id ?? started.id;
         if (!newJobId) throw new Error(`startJob: missing job id in response: ${JSON.stringify(started)}`);
-        setJobId(newJobId);
+        setJobId(newJobId);        
         setState("running");
-
-        // immediately fetch first status
-        const first = await api.getJob(newJobId, { signal: ac.signal });
-        setJob(first);
+        setJob(null);
+        
+        // Timeout
+        startedAtRef.current = Date.now();
+        lastChangeAtRef.current = Date.now();
+        lastFingerprintRef.current = null;
 
         return started;
       } catch (e) {
@@ -74,6 +82,43 @@ export function useComfyJob({ api, pollMs = 750, autoPoll = true } = {}) {
       const latest = await api.getJob(jobId, { signal: ac.signal });
       setJob(latest);
 
+      // Timeout 
+      const fp = JSON.stringify({
+        status: latest?.status,
+        // progress fields you care about
+        frac: latest?.progress?.fraction,
+        node: latest?.progress?.current_node,
+        seen: latest?.progress?.nodes_seen,
+        out: latest?.outputs?.length,
+      });      
+
+      const now = Date.now();
+      if (fp !== lastFingerprintRef.current) {
+        lastFingerprintRef.current = fp;
+        lastChangeAtRef.current = now;
+      }
+
+      const startedAt = startedAtRef.current || now;
+      const lastChangeAt = lastChangeAtRef.current || now;
+
+      if (now - startedAt > hardTimeoutMs) {
+        clearPoll();
+        setState("error");
+        setError(new Error("Generation timed out (hard timeout)."));
+        // optional: cancel server-side
+        if (api?.cancelJob && jobId) api.cancelJob(jobId).catch(() => {});
+        return;
+      }
+
+      if (now - lastChangeAt > staleTimeoutMs && latest?.status === "running") {
+        clearPoll();
+        setState("error");
+        setError(new Error("Generation stalled (no progress updates)."));
+        if (api?.cancelJob && jobId) api.cancelJob(jobId).catch(() => {});
+        return;
+      }
+
+      // //timeout
       if (latest?.status === "done") {
         clearPoll();
         setState("done");

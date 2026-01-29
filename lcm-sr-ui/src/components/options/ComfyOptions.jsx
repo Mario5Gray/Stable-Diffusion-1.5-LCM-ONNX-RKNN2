@@ -23,6 +23,7 @@ export function ComfyOptions({
   onDone,
   onError,
   onOutputs,
+  onComfyStart,
 }) {
   // API + job hook
   const api = useMemo(() => createComfyInvokerApi(apiBase), [apiBase]);
@@ -50,7 +51,7 @@ export function ComfyOptions({
 
   // --- Run action ---
   const run = useCallback(async () => {
-    onStart?.();
+    onComfyStart?.();
 
     let inputImageFile = null;
 
@@ -80,7 +81,7 @@ export function ComfyOptions({
       onError?.(err);
       throw err;
     }
-    console.log( "cfg=" + cfg + ", steps=" + steps + ", denoise=" + denoise)
+
     return comfy.start({
       workflowId,
       params: { cfg, steps, denoise },
@@ -125,7 +126,7 @@ export function ComfyOptions({
 
   useEffect(() => {
     let cancelled = false;
-    console.log( "cfg=" + cfg + ", steps=" + steps + ", denoise=" + denoise)
+  
     async function sync() {
       const key = inputImage?.key ?? null;
 
@@ -249,7 +250,7 @@ export function ComfyOptions({
             text-white
             shadow-md
             hover:from-purple-500 hover:to-pink-500
-            active:scale-[0.98]
+            active:scale-[0.90]
             transition-all
           "
         >
@@ -277,7 +278,7 @@ export function ComfyOptions({
         <div style={{ display: "grid", gap: 8 }}>
           {comfy.job.outputs.map((o) => (
             <img
-              key={o.url ?? `${o.filename}-${o.subfolder ?? ""}`}
+              key={o.id ?? `${comfy.jobId}:${o.type}:${o.subfolder ?? ""}:${o.filename ?? o.url}`}
               src={o.url}
               alt=""
               style={{ maxWidth: "100%" }}

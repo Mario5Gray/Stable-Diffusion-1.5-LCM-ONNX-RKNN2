@@ -3,6 +3,7 @@ import logging
 import uvicorn
 from server.logging_config import LOGGING_CONFIG, LOG_LEVEL
 from server.lcm_sr_server import app
+from server.startup_hooks import start_jobs_reaper
 
 def main():
     # Configure logging before starting uvicorn
@@ -19,6 +20,8 @@ def main():
         log_level=LOG_LEVEL.lower(),
         access_log=True,
     )
+
+    start_jobs_reaper();
 
 if __name__ == "__main__":
     main()

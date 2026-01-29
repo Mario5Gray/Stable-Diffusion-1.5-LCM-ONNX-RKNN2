@@ -2,6 +2,9 @@ import copy
 import threading
 from typing import Any, Dict, Optional
 
+STALE_S = 60          # no heartbeat for 60s => stale
+HARD_S  = 15 * 60     # 15 min hard cap
+
 JOBS_LOCK = threading.RLock()
 JOBS: Dict[str, Dict[str, Any]] = {}
 
@@ -22,6 +25,29 @@ def jobs_update(job_id: str, patch: Dict[str, Any]) -> None:
         if j is None:
             return
         j.update(patch)
+
+def jobs_items_snapshot() -> List[Tuple[str, Dict[str, Any]]]:
+    """
+    Safe iteration helper.
+    Returns a list of (job_id, job_dict_copy) so callers can iterate
+    without holding the lock.
+    """
+    with JOBS_LOCK:
+        return [(jid, copy.deepcopy(j)) for jid, j in JOBS.items()]
+
+
+def jobs_mark_error_if_running(job_id: str, message: str) -> None:
+    with JOBS_LOCK:
+        j = JOBS.get(job_id)
+        if not j:
+            return
+        if j.get("status") in ("done", "error", "canceled"):
+            return
+        now = time.time()
+        j["status"] = "error"
+        j["error"] = message
+        j["finished_at"] = now
+        j["updated_at"] = now
 
 def jobs_update_path(job_id: str, path: str, value: Any) -> None:
     """

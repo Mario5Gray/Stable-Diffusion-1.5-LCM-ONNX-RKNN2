@@ -117,7 +117,6 @@ async def start_job(
 
     return {"job_id": job_id, "jobId": job_id, "id": job_id}
 
-
 @router.get("/v1/comfy/jobs/{job_id}")
 def get_job(job_id: str):
     j = jobs_get(job_id)
@@ -139,6 +138,9 @@ def _run_job(job_id: str, workflow_id: str, params: Dict[str, Any], uploaded_ima
 
     error_id = None
     ws = None
+    jobs_update_path(job_id, "status", "running")
+    jobs_update_path(job_id, "started_at", time.time())
+    jobs_update_path(job_id, "heartbeat_at", time.time())
 
     # --- tiny local aliases (micro-optimization) ---
     # Optimization: alias frequently-called globals to local vars to reduce global/dict lookups
@@ -214,6 +216,9 @@ def _run_job(job_id: str, workflow_id: str, params: Dict[str, Any], uploaded_ima
         max_wait_s = float(params.get("max_wait_s") or 900)
 
         def on_node(node: Any) -> None:
+            now = time.time()
+            jobs_update_path(job_id, "heartbeat_at", now)
+            jobs_update_path(job_id, "updated_at", now)            
             """
             Called for each executing event for this prompt_id.
             We only write to JOBS via jobs_* helpers to avoid races.
@@ -252,12 +257,14 @@ def _run_job(job_id: str, workflow_id: str, params: Dict[str, Any], uploaded_ima
         refs = inv.get_history_outputs(prompt_id)
 
         base = inv.base_url.rstrip("/")
-        outputs = []
+        outputs = []        
         # Optimization: localize f-string inputs; keep loop simple for clarity
         for ref in refs:
             url = f"{base}/view?filename={ref.filename}&type={ref.type}&subfolder={ref.subfolder}"
+            out_id = f"{job_id}:{ref.type}:{ref.subfolder}:{ref.filename}"
             outputs.append(
                 {
+                    "id": out_id,
                     "url": url,
                     "filename": ref.filename,
                     "type": ref.type,

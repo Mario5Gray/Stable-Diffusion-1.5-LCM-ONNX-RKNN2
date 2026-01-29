@@ -147,6 +147,7 @@ export function useChatMessages() {
    * @param {string} id - Message ID to toggle
    */
   const toggleSelectMsg = useCallback((id) => {
+    console.log("currentMSGID: " + (id ? id : 0))
     setSelectedMsgId((current) => (current === id ? null : id));
   }, []);
 
