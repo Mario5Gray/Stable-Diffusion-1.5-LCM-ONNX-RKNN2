@@ -27,6 +27,11 @@ LOGGING_CONFIG = {
         },
     },
     "loggers": {
+        # Root logger catches everything not explicitly configured
+        "": {
+            "handlers": ["default"],
+            "level": LOG_LEVEL,
+        },
         # Your app loggers
         "comfy": {
             "handlers": ["default"],

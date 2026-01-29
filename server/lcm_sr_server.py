@@ -46,8 +46,8 @@ from typing import Optional, List, Dict, Tuple
 from contextlib import asynccontextmanager
 
 import numpy as np
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body
-from fastapi.responses import Response
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body, Request
+from fastapi.responses import Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -71,6 +71,14 @@ from backends.base import ModelPaths, Job
 from yume.dream_init import initialize_dream_system, shutdown_dream_system
 
 import logging
+
+# Try to import RKNNLite for super-resolution
+try:
+    from rknnlite.api import RKNNLite
+    RKNNLITE_AVAILABLE = True
+except ImportError:
+    RKNNLITE_AVAILABLE = False
+    RKNNLite = None
 
 BACKEND = os.environ.get("BACKEND", "auto").lower().strip()  # auto|rknn|cuda
 COMFYUI_ENABLED = os.environ.get("COMFYUI_ENABLED", "false").lower().strip()
@@ -267,6 +275,7 @@ class PipelineService:
                 if not job.fut.done():
                     job.fut.set_result((png, seed))
             except Exception as e:
+                logger.error(f"Worker {worker_idx} job failed: {e}", exc_info=True)
                 if not job.fut.done():
                     job.fut.set_exception(e)
             finally:
@@ -469,6 +478,7 @@ class SuperResService:
                 if not job.fut.done():
                     job.fut.set_result(out_bytes)
             except Exception as e:
+                logger.error(f"SR Worker {worker_idx} job failed: {e}", exc_info=True)
                 if not job.fut.done():
                     job.fut.set_exception(e)
             finally:
@@ -501,51 +511,95 @@ paths = ModelPaths(root=MODEL_ROOT)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.service = PipelineService.get_instance(
-        paths=paths,
-        num_workers=NUM_WORKERS,
-        queue_max=QUEUE_MAX,
-        rknn_context_cfgs=build_rknn_context_cfgs_for_rk3588(NUM_WORKERS),
-        use_rknn_context_cfgs=USE_RKNN_CONTEXT_CFGS,
-    )
+    logger.info("Starting FastAPI server lifespan...")
+    logger.info(f"BACKEND={BACKEND}, NUM_WORKERS={NUM_WORKERS}, LOG_LEVEL={os.getenv('LOG_LEVEL', 'INFO')}")
+
+    try:
+        app.state.service = PipelineService.get_instance(
+            paths=paths,
+            num_workers=NUM_WORKERS,
+            queue_max=QUEUE_MAX,
+            rknn_context_cfgs=build_rknn_context_cfgs_for_rk3588(NUM_WORKERS),
+            use_rknn_context_cfgs=USE_RKNN_CONTEXT_CFGS,
+        )
+        logger.info("Pipeline service initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize pipeline service: {e}", exc_info=True)
+        raise
 
     app.state.sr_service = None
     if SR_ENABLED:
         if not os.path.isfile(SR_MODEL_PATH):
+            logger.error(f"SR model not found at SR_MODEL_PATH={SR_MODEL_PATH}")
             raise RuntimeError(f"SR model not found at SR_MODEL_PATH={SR_MODEL_PATH}")
 
-        app.state.sr_service = SuperResService(
-            model_path=SR_MODEL_PATH,
-            num_workers=SR_NUM_WORKERS,
-            queue_max=SR_QUEUE_MAX,
-            input_size=SR_INPUT_SIZE,
-            output_size=SR_OUTPUT_SIZE,
-        )
+        try:
+            app.state.sr_service = SuperResService(
+                model_path=SR_MODEL_PATH,
+                num_workers=SR_NUM_WORKERS,
+                queue_max=SR_QUEUE_MAX,
+                input_size=SR_INPUT_SIZE,
+                output_size=SR_OUTPUT_SIZE,
+            )
+            logger.info("Super-resolution service initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize SR service: {e}", exc_info=True)
+            raise
 
-    app.state.storage = StorageProvider.make_storage_provider_from_env()
-
-    if YUME_ENABLED:
-        await startup_yume()
-
-    yield
-
-    # shutdown
     try:
-        app.state.storage.close()
-    except Exception:
-        pass
-
-    app.state.service.shutdown()
-    if app.state.sr_service is not None:
-        app.state.sr_service.shutdown()
+        app.state.storage = StorageProvider.make_storage_provider_from_env()
+        logger.info("Storage provider initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize storage provider: {e}", exc_info=True)
+        raise
 
     if YUME_ENABLED:
         try:
-            shutdown_dream_system        
-        except Exception:
-            pass
+            await startup_yume()
+        except Exception as e:
+            logger.error(f"Failed to initialize Yume: {e}", exc_info=True)
+            raise
+
+    logger.info("Server startup complete")
+    yield
+
+    # shutdown
+    logger.info("Starting server shutdown...")
+    try:
+        app.state.storage.close()
+    except Exception as e:
+        logger.error(f"Error closing storage: {e}", exc_info=True)
+
+    try:
+        app.state.service.shutdown()
+        logger.info("Pipeline service shut down")
+    except Exception as e:
+        logger.error(f"Error shutting down pipeline service: {e}", exc_info=True)
+
+    if app.state.sr_service is not None:
+        try:
+            app.state.sr_service.shutdown()
+            logger.info("SR service shut down")
+        except Exception as e:
+            logger.error(f"Error shutting down SR service: {e}", exc_info=True)
+
+    if YUME_ENABLED:
+        try:
+            shutdown_dream_system()
+            logger.info("Yume system shut down")
+        except Exception as e:
+            logger.error(f"Error shutting down Yume: {e}", exc_info=True)
 
 app = FastAPI(lifespan=lifespan, title="LCM_Stable_Diffusion and Super_Resolution Service")
+
+# Global exception handler to ensure all errors are logged
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {str(exc)}"}
+    )
 
 RequestLogger.install(app)
 
@@ -588,6 +642,7 @@ def generate(req: GenerateRequest):
     try:
         png_bytes, seed = fut.result(timeout=REQUEST_TIMEOUT)
     except Exception as e:
+        logger.error(f"Generate endpoint failed: {e}", exc_info=True)
         msg = str(e)
         if "Queue full" in msg:
             raise HTTPException(status_code=429, detail="Too many requests (queue full). Try again.")
@@ -621,6 +676,7 @@ def generate(req: GenerateRequest):
             media_type = "image/jpeg" if req.superres_format == "jpeg" else "image/png"
 
         except Exception as e:
+            logger.error(f"Super-resolution failed in /generate: {e}", exc_info=True)
             msg = str(e)
             if "Queue full" in msg:
                 raise HTTPException(status_code=429, detail="Too many requests (SR queue full). Try again.")
@@ -707,6 +763,7 @@ async def superres(
     try:
         out_bytes = fut.result(timeout=SR_REQUEST_TIMEOUT)
     except Exception as e:
+        logger.error(f"Super-resolution failed in /superres: {e}", exc_info=True)
         msg = str(e)
         if "Queue full" in msg:
             raise HTTPException(status_code=429, detail="Too many requests (SR queue full). Try again.")

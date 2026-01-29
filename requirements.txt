@@ -4,7 +4,7 @@ protobuf>=4.21.6,<=4.25.4
 # Newer models need this
 peft>=0.10
 accelerate>=0.30
-
+xformers
 
 # utils
 psutil>=5.9.0

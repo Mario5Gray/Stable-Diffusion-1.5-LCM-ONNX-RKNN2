@@ -15,7 +15,7 @@ class StyleDef:
     adapter_name: str  # stable internal name used in diffusers
     levels: Sequence[float]  # e.g. [0.35, 0.60, 0.85, 1.15]
 
-    required_cross_attention_dim: Optional[int] = None  # e.g. 768 (SD1.x) or 2048 (SDXL)
+    required_cross_attention_dim: Optional[int] = 768  # e.g. 768 (SD1.x) or 2048 (SDXL)
 
 # Tiny request parsing helper (no pydantic)
 def parse_style_request(params: dict) -> StyleRequest:
