@@ -51,8 +51,6 @@ export function ComfyOptions({
 
   // --- Run action ---
   const run = useCallback(async () => {
-    onComfyStart?.();
-
     let inputImageFile = null;
 
     // Prefer file already prepared by sync() effect (avoids refetching URL)
@@ -81,7 +79,7 @@ export function ComfyOptions({
       onError?.(err);
       throw err;
     }
-
+    onComfyStart?.();
     return comfy.start({
       workflowId,
       params: { cfg, steps, denoise },

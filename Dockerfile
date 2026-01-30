@@ -73,7 +73,8 @@ COPY start.sh /app/
 COPY backends/ /app/backends/
 COPY yume/ /app/yume/
 COPY invokers/ /app/invokers/
-
+COPY utils/ /app/utils/
+COPY *.sh /app/
 RUN chmod +x /app/start.sh
 
 # Copy built UI into where FastAPI will serve it

@@ -26,31 +26,29 @@ nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | head -1
 echo ""
 
 # Check environment variables
-if [ -z "$SDXL_MODEL_ROOT" ] && [ -z "$MODEL_ROOT" ]; then
-    echo "❌ Error: SDXL_MODEL_ROOT (or MODEL_ROOT) not set."
+if [ -z "$MODEL_ROOT" ]; then
+    echo "❌ Error: MODEL_ROOT not set."
     echo ""
     echo "Set environment variables:"
-    echo "  export SDXL_MODEL_ROOT=/path/to/models"
-    echo "  export SDXL_MODEL=sdxl-model.safetensors"
+    echo "  export MODEL_ROOT=/path/to/models"
+    echo "  export MODEL=sdxl-model.safetensors"
     exit 1
 fi
 
-if [ -z "$SDXL_MODEL" ] && [ -z "$MODEL" ]; then
-    echo "❌ Error: SDXL_MODEL (or MODEL) not set."
+if [ -z "$MODEL" ]; then
+    echo "❌ Error: MODEL not set."
     echo ""
     echo "Set environment variables:"
-    echo "  export SDXL_MODEL=sdxl-model.safetensors"
+    echo "  export MODEL=sdxl-model.safetensors"
     exit 1
 fi
 
-MODEL_ROOT_VAL="${SDXL_MODEL_ROOT:-$MODEL_ROOT}"
-MODEL_VAL="${SDXL_MODEL:-$MODEL}"
-MODEL_PATH="$MODEL_ROOT_VAL/$MODEL_VAL"
+MODEL_PATH="$MODEL_ROOT/$MODEL"
 
 echo "✓ Environment variables:"
-echo "  SDXL_MODEL_ROOT: $MODEL_ROOT_VAL"
-echo "  SDXL_MODEL:      $MODEL_VAL"
-echo "  Full path:       $MODEL_PATH"
+echo "  MODEL_ROOT: $MODEL_ROOT"
+echo "  MODEL:      $MODEL"
+echo "  Full path:  $MODEL_PATH"
 echo ""
 
 # Check if model exists

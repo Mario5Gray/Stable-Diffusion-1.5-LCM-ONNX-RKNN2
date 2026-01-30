@@ -52,12 +52,12 @@ function ImagePlaceholder({ size, onCancel }) {
   const displayHeight = Math.round(height * scale);
 
   return (
-    <div className="flex justify-start w-full">
+    <div className="flex justify-center w-full">
       <div
-        className="image-placeholder relative"
+        className="image-placeholder relative outline outline-2 outline-red-500"
         style={{ width: displayWidth, height: displayHeight }}
       >
-        <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
           <Loader2 className="h-8 w-8 animate-spin opacity-50" />
           <span className="text-xs opacity-70">Generating…</span>
         </div>

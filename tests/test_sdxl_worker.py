@@ -10,12 +10,12 @@ Requirements:
 - CUDA GPU with sufficient VRAM (12GB+ recommended for SDXL)
 - SDXL model checkpoint
 - Set environment variables before running:
-  - SDXL_MODEL_ROOT or MODEL_ROOT
-  - SDXL_MODEL or MODEL (checkpoint name)
+  - MODEL_ROOT
+  - MODEL (checkpoint name)
 
 Usage:
-  export SDXL_MODEL_ROOT=/path/to/models
-  export SDXL_MODEL=sdxl-1.0.safetensors
+  export MODEL_ROOT=/path/to/models
+  export MODEL=sdxl-1.0.safetensors
   pytest tests/test_sdxl_worker.py -v
 """
 

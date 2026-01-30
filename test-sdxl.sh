@@ -32,8 +32,8 @@ nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | head -1
 echo ""
 
 # Get model path from args or environment
-MODEL_ROOT="${1:-${SDXL_MODEL_ROOT:-${MODEL_ROOT}}}"
-MODEL_NAME="${2:-${SDXL_MODEL:-${MODEL}}}"
+MODEL_ROOT="${1:-${MODEL_ROOT}}"
+MODEL_NAME="${2:-${MODEL}}"
 
 if [ -z "$MODEL_ROOT" ]; then
     echo "❌ Error: Model root not specified."
@@ -42,8 +42,8 @@ if [ -z "$MODEL_ROOT" ]; then
     echo "  ./test-sdxl.sh /path/to/models sdxl-model.safetensors"
     echo ""
     echo "Or set environment variables:"
-    echo "  export SDXL_MODEL_ROOT=/path/to/models"
-    echo "  export SDXL_MODEL=sdxl-model.safetensors"
+    echo "  export MODEL_ROOT=/path/to/models"
+    echo "  export MODEL=sdxl-model.safetensors"
     echo "  ./test-sdxl.sh"
     exit 1
 fi
@@ -64,9 +64,9 @@ if [ ! -e "$MODEL_PATH" ]; then
 fi
 
 echo "✓ Model configuration:"
-echo "  SDXL_MODEL_ROOT: $MODEL_ROOT"
-echo "  SDXL_MODEL:      $MODEL_NAME"
-echo "  Full path:       $MODEL_PATH"
+echo "  MODEL_ROOT: $MODEL_ROOT"
+echo "  MODEL:      $MODEL_NAME"
+echo "  Full path:  $MODEL_PATH"
 echo ""
 
 # Build test image
@@ -121,9 +121,7 @@ docker run --rm \
     --gpus all \
     --privileged \
     -v "${MODEL_ROOT_ABS}:/models:ro" \
-    -e SDXL_MODEL_ROOT=/models \
     -e MODEL_ROOT=/models \
-    -e SDXL_MODEL="$MODEL_NAME" \
     -e MODEL="$MODEL_NAME" \
     -e CUDA_ENABLE_XFORMERS=1 \
     -e CUDA_DTYPE=fp16 \

@@ -14,7 +14,7 @@ export function useComfyJob({ api, pollMs = 750, autoPoll = true } = {}) {
   const startedAtRef = useRef(0);
 
   const hardTimeoutMs = 6 * 60 * 1000;   // e.g. 6 minutes
-  const staleTimeoutMs = 120 * 1000;      // e.g. 30s with no changes
+  const staleTimeoutMs = 30 * 1000;      // e.g. 30s with no changes
 
   const clearPoll = useCallback(() => {
     if (pollTimerRef.current) {
@@ -91,17 +91,23 @@ export function useComfyJob({ api, pollMs = 750, autoPoll = true } = {}) {
         seen: latest?.progress?.nodes_seen,
         out: latest?.outputs?.length,
       });      
-
-      const now = Date.now();
+      
       if (fp !== lastFingerprintRef.current) {
         lastFingerprintRef.current = fp;
-        lastChangeAtRef.current = now;
+        lastChangeAtRef.current = Date.now();
       }
 
-      const startedAt = startedAtRef.current || now;
-      const lastChangeAt = lastChangeAtRef.current || now;
+      const secondsAgo = (t) =>
+        `${Math.max(0, Math.floor((Date.now() - t) / 1000))}s ago`;
 
-      if (now - startedAt > hardTimeoutMs) {
+      const startedAt = startedAtRef.current || Date.now();
+      const lastChangeAt = lastChangeAtRef.current || Date.now();
+
+      console.log(`[timing] started ${secondsAgo(startedAt)}`);
+      console.log(`[timing] last change ${secondsAgo(lastChangeAt)}`);
+
+      if (Date.now() - startedAt > hardTimeoutMs) {
+        console.log("HARDTIMEOUT " + jobId)
         clearPoll();
         setState("error");
         setError(new Error("Generation timed out (hard timeout)."));
@@ -110,7 +116,8 @@ export function useComfyJob({ api, pollMs = 750, autoPoll = true } = {}) {
         return;
       }
 
-      if (now - lastChangeAt > staleTimeoutMs && latest?.status === "running") {
+      if (Date.now() - lastChangeAt > staleTimeoutMs && latest?.status === "running") {
+        console.log("STALLED " + jobId)
         clearPoll();
         setState("error");
         setError(new Error("Generation stalled (no progress updates)."));

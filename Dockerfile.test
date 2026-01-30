@@ -59,17 +59,17 @@ RUN pip install --no-cache-dir \
     pytest-asyncio
 
 # Copy application code
-COPY backends/ /app/backends/
 COPY server/ /app/server/
-COPY tests/ /app/tests/
+COPY *.py /app/
+COPY backends/ /app/backends/
 COPY yume/ /app/yume/
 COPY invokers/ /app/invokers/
-COPY *.py /app/
+COPY utils/ /app/utils/
+COPY tests/ /app/tests/
 
-# Copy test runner and verification script
+# Copy test runner
 COPY run_sdxl_tests.sh /app/run_sdxl_tests.sh
-COPY verify_cuda.py /app/verify_cuda.py
-RUN chmod +x /app/run_sdxl_tests.sh /app/verify_cuda.py
+RUN chmod +x /app/run_sdxl_tests.sh
 
 # Set environment defaults for testing
 ENV PYTHONPATH=/app

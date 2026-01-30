@@ -52,7 +52,9 @@ def detect_worker_type() -> str:
         logger.info(f"[ModelDetection] Cross-attention dim: {info.cross_attention_dim}")
         logger.info(f"[ModelDetection] Confidence: {info.confidence:.2f}")
 
-        if info.cross_attention_dim == 2048:
+        if info.cross_attention_dim in (2048, 1280):
+            # 2048: SDXL Base
+            # 1280: SDXL Refiner
             logger.info(f"[ModelDetection] Using SDXL worker")
             return "sdxl"
         elif info.cross_attention_dim in (768, 1024):
@@ -61,7 +63,7 @@ def detect_worker_type() -> str:
         else:
             raise RuntimeError(
                 f"Unsupported cross_attention_dim: {info.cross_attention_dim}. "
-                f"Expected 768 (SD1.5), 1024 (SD2.x), or 2048 (SDXL)"
+                f"Expected 768 (SD1.5), 1024 (SD2.x), 1280 (SDXL Refiner), or 2048 (SDXL Base)"
             )
     except Exception as e:
         logger.error(f"[ModelDetection] Failed to detect model: {e}")

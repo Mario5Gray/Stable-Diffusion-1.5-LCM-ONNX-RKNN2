@@ -17,7 +17,6 @@ from backends.styles import STYLE_REGISTRY, parse_style_request
 def _bool_env(name: str, default: str = "0") -> bool:
     return os.environ.get(name, default).lower() in ("1", "true", "yes", "on")
 
-
 class DiffusersCudaWorker(PipelineWorker):
     """
     CUDA Diffusers worker for SD1.5 LCM models.
@@ -34,7 +33,6 @@ class DiffusersCudaWorker(PipelineWorker):
       CUDA_ENABLE_XFORMERS=1     (default 0)
       CUDA_ATTENTION_SLICING=0/1 (default 0)
     """
-
     def __init__(self, worker_id: int):
         super().__init__(worker_id)
 
@@ -111,7 +109,7 @@ class DiffusersCudaWorker(PipelineWorker):
         print(f"[cuda] text_encoder.hidden_size={te_dim}")     
 
         # SD1.5 styles: required_cross_attention_dim=768
-        # SDXL styles: required_cross_attention_dim=2048
+        # SDXL styles: required_cross_attention_dim=2048,
         # Determine model compatibility info once
         cad = getattr(self.pipe.unet.config, "cross_attention_dim", None)
         if cad == 2048 and type(self.pipe).__name__ == "StableDiffusionPipeline":
@@ -133,6 +131,7 @@ class DiffusersCudaWorker(PipelineWorker):
                     self._style_loaded[sd.adapter_name] = False
                     continue
             try:
+                print(f"[cuda] loading lora ({sd.required_cross_attention_dim}) weights from {sd.lora_path}")
                 try:
                     # Newer diffusers supports adapter_name
                     self.pipe.load_lora_weights(sd.lora_path, adapter_name=sd.adapter_name)
