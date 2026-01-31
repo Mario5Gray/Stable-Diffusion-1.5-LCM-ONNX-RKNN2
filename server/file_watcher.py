@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileModifiedEvent
+from watchdog.events import FileSystemEventHandler
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class ConfigFileHandler(FileSystemEventHandler):
 
         try:
             self.reload_callback()
-            logger.info(f"[FileWatcher] Reload successful")
+            logger.info("[FileWatcher] Reload successful")
         except Exception as e:
             logger.error(f"[FileWatcher] Reload failed: {e}", exc_info=True)
 

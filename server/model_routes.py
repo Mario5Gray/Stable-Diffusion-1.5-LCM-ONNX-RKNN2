@@ -123,7 +123,7 @@ async def switch_mode(request: ModeSwitchRequest):
 
     # Queue mode switch
     try:
-        future = pool.switch_mode(request.mode)
+        pool.switch_mode(request.mode)
         logger.info(f"[API] Mode switch queued: {current} -> {request.mode}")
 
         return {

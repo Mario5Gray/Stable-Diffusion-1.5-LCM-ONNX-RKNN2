@@ -15,16 +15,24 @@ import queue
 import threading
 import torch
 from abc import ABC, abstractmethod
-from typing import Optional, Any, Callable
-from dataclasses import dataclass
+from typing import Optional, Any, Callable, Protocol
+from dataclasses import dataclass, field
 from concurrent.futures import Future
 from enum import Enum
 
-from server.mode_config import get_mode_config, ModeConfig
-from backends.model_registry import get_model_registry
+from server.mode_config import get_mode_config, ModeConfig, ModeConfigManager
+from backends.model_registry import get_model_registry, ModelRegistry
 from backends.base import PipelineWorker
 
 logger = logging.getLogger(__name__)
+
+
+# Type hints for dependency injection
+class WorkerFactory(Protocol):
+    """Protocol for worker creation functions."""
+    def __call__(self, worker_id: int) -> PipelineWorker:
+        """Create a worker with the given ID."""
+        ...
 
 
 class JobType(Enum):
@@ -43,8 +51,8 @@ class Job(ABC):
 
     Extensible job system - subclass this to create new job types.
     """
-    job_type: JobType
-    fut: Future = None  # Result future
+    job_type: JobType = field(init=False)
+    fut: Future = field(init=False, default=None)  # Result future
 
     def __post_init__(self):
         if self.fut is None:
@@ -133,14 +141,31 @@ class WorkerPool:
     - Extensible job queue (generation, mode switch, custom)
     - Mode switching with automatic worker recreation
     - VRAM tracking via ModelRegistry
+    - Dependency injection support for testing
     """
 
-    def __init__(self, queue_max: int = 64):
+    def __init__(
+        self,
+        queue_max: int = 64,
+        worker_factory: Optional[WorkerFactory] = None,
+        mode_config: Optional[ModeConfigManager] = None,
+        registry: Optional[ModelRegistry] = None,
+    ):
         """
         Initialize worker pool.
 
         Args:
             queue_max: Maximum queue size
+            worker_factory: Optional factory function for creating workers.
+                           Defaults to create_cuda_worker from worker_factory module.
+            mode_config: Optional mode configuration manager.
+                        Defaults to global singleton from get_mode_config().
+            registry: Optional model registry for VRAM tracking.
+                     Defaults to global singleton from get_model_registry().
+
+        Note:
+            When all optional parameters are None (default), uses global singletons
+            for backward compatibility. For testing, inject mocked dependencies.
         """
         self.queue_max = queue_max
         self.q: queue.Queue[Job] = queue.Queue(maxsize=queue_max)
@@ -148,13 +173,33 @@ class WorkerPool:
         self._worker: Optional[PipelineWorker] = None
         self._worker_thread: Optional[threading.Thread] = None
         self._current_mode: Optional[str] = None
-        self._mode_config = get_mode_config()
-        self._registry = get_model_registry()
         self._lock = threading.Lock()
+
+        # Dependency injection with defaults to singletons
+        self._worker_factory = worker_factory or self._default_worker_factory
+        self._mode_config = mode_config or get_mode_config()
+        self._registry = registry or get_model_registry()
 
         # Initialize with default mode
         default_mode = self._mode_config.get_default_mode()
         self._load_mode(default_mode)
+
+    @staticmethod
+    def _default_worker_factory(worker_id: int) -> PipelineWorker:
+        """
+        Default worker factory.
+
+        Imports and calls create_cuda_worker from worker_factory module.
+        This is the default behavior when no factory is injected.
+
+        Args:
+            worker_id: Worker ID to assign
+
+        Returns:
+            Created PipelineWorker instance
+        """
+        from backends.worker_factory import create_cuda_worker
+        return create_cuda_worker(worker_id)
 
     def _load_mode(self, mode_name: str):
         """
@@ -176,13 +221,11 @@ class WorkerPool:
         os.environ["MODEL_ROOT"] = self._mode_config.config.model_root
         os.environ["MODEL"] = mode.model
 
-        # Create worker using factory
-        from backends.worker_factory import create_cuda_worker
-
+        # Track VRAM before worker creation
         vram_before = self._registry.get_used_vram()
 
-        # Create worker
-        self._worker = create_cuda_worker(worker_id=0)
+        # Create worker using injected factory
+        self._worker = self._worker_factory(worker_id=0)
 
         vram_after = self._registry.get_used_vram()
         vram_used = vram_after - vram_before
@@ -368,10 +411,64 @@ class WorkerPool:
 _worker_pool: Optional[WorkerPool] = None
 
 
-def get_worker_pool() -> WorkerPool:
-    """Get global worker pool instance."""
+def get_worker_pool(
+    worker_factory: Optional[WorkerFactory] = None,
+    mode_config: Optional[ModeConfigManager] = None,
+    registry: Optional[ModelRegistry] = None,
+) -> WorkerPool:
+    """
+    Get global worker pool instance.
+
+    Singleton accessor with optional dependency injection support.
+    If called multiple times with different dependencies, the first
+    call wins (singleton is not recreated).
+
+    Args:
+        worker_factory: Optional factory for creating workers (for testing)
+        mode_config: Optional mode configuration manager (for testing)
+        registry: Optional model registry (for testing)
+
+    Returns:
+        Global WorkerPool instance
+
+    Note:
+        For production use, call without arguments to use defaults.
+        For testing, pass mocked dependencies on first call.
+
+    Example:
+        # Production (uses defaults)
+        pool = get_worker_pool()
+
+        # Testing (inject mocks)
+        pool = get_worker_pool(
+            worker_factory=mock_factory,
+            mode_config=mock_config,
+            registry=mock_registry,
+        )
+    """
     global _worker_pool
     if _worker_pool is None:
         queue_max = int(os.environ.get("QUEUE_MAX", "64"))
-        _worker_pool = WorkerPool(queue_max=queue_max)
+        _worker_pool = WorkerPool(
+            queue_max=queue_max,
+            worker_factory=worker_factory,
+            mode_config=mode_config,
+            registry=registry,
+        )
     return _worker_pool
+
+
+def reset_worker_pool():
+    """
+    Reset global worker pool instance.
+
+    Useful for testing to ensure clean state between tests.
+    Should NOT be used in production code.
+    """
+    global _worker_pool
+    if _worker_pool is not None:
+        try:
+            _worker_pool.shutdown()
+        except Exception:
+            pass  # Ignore shutdown errors during reset
+    _worker_pool = None
