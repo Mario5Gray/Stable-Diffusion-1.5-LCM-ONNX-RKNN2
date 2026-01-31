@@ -1,6 +1,7 @@
 // src/App.jsx
 
 import React, { useRef, useMemo, useState, useCallback, useEffect } from 'react';
+import { ChatDropzone } from "./components/chat/ChatDropzone";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { useLatentExploration } from './hooks/useLatentExploration';
 import { useChatMessages } from './hooks/useChatMessages';
@@ -325,6 +326,11 @@ const inputImage = useMemo(() => {
 {/* Tab Content */}
 <div className="flex-1 overflow-hidden">
   {/* Main Chat Tab */}
+<ChatDropzone
+  addMessage={addMessage}
+  setSelectedMsgId={setSelectedMsgId}
+  setUploadFile={setUploadFile}
+>
   <TabsContent value="chat" className="h-full m-0">        
       <div className="mx-auto max-w-6xl p-4 md:p-6 h-full">
         <div className="grid h-full grid-cols-1 gap-4 md:grid-cols-[1fr_360px]">
@@ -401,7 +407,7 @@ const inputImage = useMemo(() => {
         </div>
       </div>
     </TabsContent>
-
+  </ChatDropzone>
           {/* Dream Gallery Tab */}
           <TabsContent value="dreams" className="h-full m-0">
             <DreamGallery apiBase={apiBase} />

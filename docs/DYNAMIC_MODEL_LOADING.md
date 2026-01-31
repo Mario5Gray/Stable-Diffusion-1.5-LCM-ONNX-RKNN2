@@ -64,7 +64,7 @@ curl -X POST http://localhost:4200/generate \
 # Switch to specific mode
 curl -X POST http://localhost:4200/generate \
   -H "Content-Type: application/json" \
-  -d '{"mode": "sdxl-general", "prompt": "a portrait"}'
+  -d '{"mode": "lcm-chenkin", "prompt": "a portrait"}'
 ```
 
 ## Architecture
