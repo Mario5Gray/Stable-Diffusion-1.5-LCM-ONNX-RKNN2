@@ -58,14 +58,17 @@ RUN pip install --no-cache-dir \
     pytest-timeout \
     pytest-asyncio
 
-# Copy application code
+# Copy server code
 COPY server/ /app/server/
-COPY *.py /app/
+COPY persistence/ /app/persistence/
 COPY backends/ /app/backends/
 COPY yume/ /app/yume/
 COPY invokers/ /app/invokers/
 COPY utils/ /app/utils/
-COPY tests/ /app/tests/
+
+COPY *.py /app/
+COPY *.sh /app/
+RUN chmod +x /app/start.sh
 
 # Copy test runner
 COPY run_sdxl_tests.sh /app/run_sdxl_tests.sh

@@ -66,10 +66,10 @@ from server.comfy_routes import router as comfy_router
 from yume.dream_endpoints import dream_router
 
 # lcm_sr_server.py (add near imports)
-from compat_endpoints import CompatEndpoints
-from request_logger import RequestLogger  # and optionally RequestLoggerConfig
+from server.compat_endpoints import CompatEndpoints
+from utils.request_logger import RequestLogger  # and optionally RequestLoggerConfig
 
-from storage_provider import StorageProvider
+from persistence.storage_provider import StorageProvider
 
 from backends.base import ModelPaths, Job
 

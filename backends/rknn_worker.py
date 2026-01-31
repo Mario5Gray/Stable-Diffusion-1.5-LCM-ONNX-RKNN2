@@ -1,6 +1,6 @@
 # rknn_worker.py
 from .base import PipelineWorker, GenSpec, ModelPaths, Job
-from rknnlcm import RKNN2Model, RKNN2LatentConsistencyPipeline
+from backends.rknnlcm import RKNN2Model, RKNN2LatentConsistencyPipeline
 
 from transformers import CLIPTokenizer
 from diffusers import LCMScheduler

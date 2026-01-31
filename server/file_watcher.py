@@ -6,7 +6,6 @@ Uses watchdog library for cross-platform file watching:
 - FSEvents on macOS
 - polling fallback on other platforms (but we avoid this)
 """
-
 import logging
 import threading
 from pathlib import Path
@@ -16,7 +15,6 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 logger = logging.getLogger(__name__)
-
 
 class ConfigFileHandler(FileSystemEventHandler):
     """

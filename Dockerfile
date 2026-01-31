@@ -68,12 +68,13 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy server code
 COPY server/ /app/server/
-COPY *.py /app/
-COPY start.sh /app/
+COPY persistence/ /app/persistence/
 COPY backends/ /app/backends/
 COPY yume/ /app/yume/
 COPY invokers/ /app/invokers/
 COPY utils/ /app/utils/
+
+COPY *.py /app/
 COPY *.sh /app/
 RUN chmod +x /app/start.sh
 

@@ -26,10 +26,15 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy server code
-COPY *.py /app/
+COPY server/ /app/server/
+COPY persistence/ /app/persistence/
 COPY backends/ /app/backends/
 COPY yume/ /app/yume/
-COPY start.sh /app/
+COPY invokers/ /app/invokers/
+COPY utils/ /app/utils/
+
+COPY *.py /app/
+COPY *.sh /app/
 RUN chmod +x /app/start.sh
 
 # Create UI mount point (will be mounted at runtime)
