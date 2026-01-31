@@ -305,11 +305,19 @@ class WorkerPool:
             try:
                 # Check if this is a mode switch job
                 if isinstance(job, ModeSwitchJob):
-                    # Execute mode switch
-                    result = job.execute(self._worker)
+                    # Check if already in target mode (skip if so)
+                    if self._current_mode == job.target_mode:
+                        logger.info(
+                            f"[WorkerPool] Already in mode '{job.target_mode}', "
+                            "skipping mode switch"
+                        )
+                        result = {"mode": job.target_mode, "status": "already_loaded"}
+                    else:
+                        # Execute mode switch
+                        result = job.execute(self._worker)
 
-                    # Reload worker with new mode
-                    self._load_mode(job.target_mode)
+                        # Reload worker with new mode
+                        self._load_mode(job.target_mode)
 
                     # Set result
                     if not job.fut.done():
@@ -326,6 +334,9 @@ class WorkerPool:
                 logger.error(f"[WorkerPool] Job failed: {e}", exc_info=True)
                 if not job.fut.done():
                     job.fut.set_exception(e)
+            finally:
+                # Mark task as done for queue.join() to work
+                self.q.task_done()
 
         logger.info("[WorkerPool] Worker loop stopped")
 
@@ -383,21 +394,21 @@ class WorkerPool:
         return self.q.qsize()
 
     def shutdown(self):
-        """Shutdown worker pool."""
+        """
+        Shutdown worker pool.
+
+        Waits for pending jobs to complete before shutting down.
+        """
         logger.info("[WorkerPool] Shutting down")
 
+        # Wait for queue to drain (pending jobs complete)
+        logger.debug(f"[WorkerPool] Waiting for {self.q.qsize()} jobs to complete")
+        self.q.join()
+
+        # Signal worker thread to stop
         self._stop.set()
 
-        # Drain queue
-        while True:
-            try:
-                job = self.q.get_nowait()
-                if not job.fut.done():
-                    job.fut.set_exception(RuntimeError("Worker pool shutting down"))
-            except queue.Empty:
-                break
-
-        # Wait for worker thread
+        # Wait for worker thread to finish
         if self._worker_thread and self._worker_thread.is_alive():
             self._worker_thread.join(timeout=5.0)
 

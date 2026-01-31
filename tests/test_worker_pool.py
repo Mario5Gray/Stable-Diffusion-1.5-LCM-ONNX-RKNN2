@@ -356,7 +356,7 @@ class TestWorkerLifecycle:
         unregister_calls = [call for call in mock_registry.unregister_model.call_args_list]
         assert len(unregister_calls) > 0
 
-    @patch('torch.cuda.empty_cache')
+    @patch('backends.worker_pool.torch.cuda.empty_cache')
     def test_mode_switch_clears_cuda_cache(self, mock_empty_cache, worker_pool):
         """Test that mode switching clears CUDA cache."""
         worker_pool.switch_mode("sd15-fast").result(timeout=5.0)
